@@ -37,7 +37,7 @@ import org.neo4j.test.GraphDescription.Graph;
 import org.neo4j.test.GraphHolder;
 import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.JavaTestDocsGenerator;
-import org.neo4j.test.TestData;
+import org.neo4j.test.TestData; 
 
 public class ExampleOfUseTest implements GraphHolder {
     public @Rule

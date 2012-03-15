@@ -417,9 +417,9 @@ public final class Iterables
         return list;
     }
 
-    public static <T, C extends T> Iterable<T> iterable( C... items )
+    public static <T> Iterable<T> iterable( T... items )
     {
-        return (Iterable<T>) Arrays.asList( items );
+        return Arrays.asList( items );
     }
 
     public static <T, C> Iterable<T> cast( Iterable<C> iterable )

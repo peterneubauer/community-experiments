@@ -19,25 +19,29 @@
  */
 package org.neo4j.cypher
 
+import internal.pipes.QueryState
 import internal.StringExtras
 import scala.collection.JavaConverters._
-import org.neo4j.graphdb.{PropertyContainer, Relationship, NotFoundException, Node}
+import org.neo4j.graphdb.{PropertyContainer, Relationship, Node}
 import java.io.{StringWriter, PrintWriter}
 import java.lang.String
 import internal.symbols.SymbolTable
+import collection.Map
+import collection.immutable.{Map => ImmutableMap}
 
-
-class PipeExecutionResult(result: Traversable[Map[String, Any]], val symbols: SymbolTable, val columns: List[String], val timeTaken: Long)
+class PipeExecutionResult(r: => Traversable[Map[String, Any]], val symbols: SymbolTable, val columns: List[String])
   extends ExecutionResult
   with StringExtras {
-  
+
+  lazy val immutableResult = r.map(m => m.toMap)
+
   def javaColumns: java.util.List[String] = columns.asJava
 
   def javaColumnAs[T](column: String): java.util.Iterator[T] = columnAs[T](column).map(x => makeValueJavaCompatible(x).asInstanceOf[T]).asJava
 
   def columnAs[T](column: String): Iterator[T] = {
     this.map(m => {
-      val item: Any = m.getOrElse(column, throw new NotFoundException("No column named '" + column + "' was found. Found: " + m.keys.mkString("(\"", "\", \"", "\")")))
+      val item: Any = m.getOrElse(column, throw new EntityNotFoundException("No column named '" + column + "' was found. Found: " + m.keys.mkString("(\"", "\", \"", "\")")))
       item.asInstanceOf[T]
     }).toIterator
   }
@@ -65,25 +69,55 @@ class PipeExecutionResult(result: Traversable[Map[String, Any]], val symbols: Sy
     columnSizes.toMap
   }
 
+  protected def createTimedResults = {
+    val start = System.currentTimeMillis()
+    val eagerResult = immutableResult.toList
+    val ms = System.currentTimeMillis() - start
+
+    (eagerResult, ms.toString)
+  }
+
   def dumpToString(writer: PrintWriter) {
-    val eagerResult = result.toList
+    val (eagerResult, timeTaken) = createTimedResults
 
     val columnSizes = calculateColumnSizes(eagerResult)
 
-    val headers = columns.map((c) => Map[String, Any](c -> Some(c))).reduceLeft(_ ++ _)
-    val headerLine: String = createString(columns, columnSizes, headers)
-    val lineWidth: Int = headerLine.length - 2
-    val --- = "+" + repeat("-", lineWidth) + "+"
-    val footer = "%d rows, %d ms".format(eagerResult.size, timeTaken)
+    if (columns.nonEmpty) {
+      val headers = columns.map((c) => Map[String, Any](c -> Some(c))).reduceLeft(_ ++ _)
+      val headerLine: String = createString(columns, columnSizes, headers)
+      val lineWidth: Int = headerLine.length - 2
+      val --- = "+" + repeat("-", lineWidth) + "+"
 
-    writer.println(---)
-    writer.println(headerLine)
-    writer.println(---)
+      val row = if (eagerResult.size > 1) "rows" else "row"
+      val footer = "%d %s".format(eagerResult.size, row)
 
-    eagerResult.foreach(resultLine => writer.println(createString(columns, columnSizes, resultLine)))
+      writer.println(---)
+      writer.println(headerLine)
+      writer.println(---)
 
-    writer.println(---)
-    writer.println(footer)
+      eagerResult.foreach(resultLine => writer.println(createString(columns, columnSizes, resultLine)))
+
+      writer.println(---)
+      writer.println(footer)
+      if (queryStatistics.containsUpdates) {
+        writer.print(queryStatistics.toString)
+      }
+    } else {
+      if (queryStatistics.containsUpdates) {
+        writer.println("+-------------------+")
+        writer.println("| No data returned. |")
+        writer.println("+-------------------+")
+        writer.print(queryStatistics.toString)
+      } else {
+        writer.println("+--------------------------------------------+")
+        writer.println("| No data returned, and nothing was changed. |")
+        writer.println("+--------------------------------------------+")
+      }
+    }
+
+
+
+    writer.println("%s ms".format(timeTaken))
   }
 
   def dumpToString(): String = {
@@ -121,10 +155,12 @@ class PipeExecutionResult(result: Traversable[Map[String, Any]], val symbols: Sy
     }).mkString("| ", " | ", " |")
   }
 
-  val iterator = result.toIterator
+  lazy val iterator = immutableResult.toIterator
 
   def hasNext: Boolean = iterator.hasNext
 
-  def next(): Map[String, Any] = iterator.next()
+  def next(): ImmutableMap[String, Any] = iterator.next()
+
+  lazy val queryStatistics = QueryStatistics.empty
 }
 

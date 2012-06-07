@@ -25,54 +25,64 @@ import static org.junit.Assert.fail;
 import static org.neo4j.graphdb.DynamicRelationshipType.withName;
 import static org.neo4j.helpers.collection.IteratorUtil.asCollection;
 
+import java.io.Serializable;
+import java.rmi.RemoteException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.shell.impl.AbstractServer;
 import org.neo4j.shell.impl.CollectingOutput;
-import org.neo4j.shell.impl.SameJvmClient;
+import org.neo4j.shell.impl.RmiLocation;
 import org.neo4j.shell.kernel.GraphDatabaseShellServer;
 import org.neo4j.test.ImpermanentGraphDatabase;
 
 @Ignore( "Not a unit test" )
 public abstract class AbstractShellTest
 {
-    protected static ImpermanentGraphDatabase db;
-    private static ShellServer shellServer;
+    protected GraphDatabaseAPI db;
+    protected ShellServer shellServer;
     private ShellClient shellClient;
+    private Integer remotelyAvailableOnPort;
     protected static final RelationshipType RELATIONSHIP_TYPE = withName( "TYPE" );
-    
+
     private Transaction tx;
-    
-    @BeforeClass
-    public static void startUp() throws Exception
-    {
-        db = new ImpermanentGraphDatabase();
-        shellServer = new GraphDatabaseShellServer( db );
-    }
-    
+
     @Before
-    public void doBefore()
+    public void doBefore() throws Exception
     {
-        db.cleanContent( true );
-        shellClient = new SameJvmClient( shellServer );
+        db = newDb();
+        shellServer = newServer( db );
+        shellClient = ShellLobby.newClient( shellServer );
     }
     
+    protected GraphDatabaseAPI newDb()
+    {
+        return new ImpermanentGraphDatabase();
+    }
+
+    protected ShellServer newServer( GraphDatabaseAPI db ) throws ShellException, RemoteException
+    {
+        return new GraphDatabaseShellServer( db );
+    }
+
     @After
-    public void doAfter()
+    public void doAfter() throws Exception
     {
-        if ( tx != null ) finishTx();
         shellClient.shutdown();
+        shellServer.shutdown();
+        db.shutdown();
     }
-    
+
     protected void beginTx()
     {
         assert tx == null;
@@ -83,22 +93,52 @@ public abstract class AbstractShellTest
     {
         finishTx( true );
     }
+    
+    protected ShellClient newRemoteClient() throws Exception
+    {
+        return newRemoteClient( new HashMap<String, Serializable>() );
+    }
+    
+    protected ShellClient newRemoteClient( Map<String, Serializable> initialSession ) throws Exception
+    {
+        return ShellLobby.newClient( RmiLocation.location( "localhost",
+                remotelyAvailableOnPort.intValue(), AbstractServer.DEFAULT_NAME ), initialSession );
+    }
+
+    protected void makeServerRemotelyAvailable() throws RemoteException
+    {
+        if ( remotelyAvailableOnPort == null )
+        {
+            remotelyAvailableOnPort = findFreePort();
+            shellServer.makeRemotelyAvailable( remotelyAvailableOnPort.intValue(), AbstractServer.DEFAULT_NAME );
+        }
+    }
+    
+    private int findFreePort()
+    {
+        // TODO
+        return AbstractServer.DEFAULT_PORT;
+    }
+
+    protected void restartServer() throws Exception
+    {
+        shellServer.shutdown();
+        db.shutdown();
+        db = newDb();
+        remotelyAvailableOnPort = null;
+        shellServer = newServer( db );
+        shellClient = ShellLobby.newClient( shellServer );
+    }
 
     protected void finishTx( boolean success )
     {
         assert tx != null;
-        if ( success ) tx.success();
+        if ( success )
+            tx.success();
         tx.finish();
         tx = null;
     }
 
-    @AfterClass
-    public static void shutDown() throws Exception
-    {
-        shellServer.shutdown();
-        db.shutdown();
-    }
-    
     protected static String pwdOutputFor( Object... entities )
     {
         StringBuilder builder = new StringBuilder();
@@ -116,18 +156,18 @@ public abstract class AbstractShellTest
         }
         return Pattern.quote( builder.toString() );
     }
-    
+
     public void executeCommand( String command, String... theseLinesMustExistRegEx ) throws Exception
     {
-        executeCommand( shellServer, shellClient, command, theseLinesMustExistRegEx );
+        executeCommand( shellClient, command, theseLinesMustExistRegEx );
     }
-    
-    public void executeCommand( ShellServer server, ShellClient client, String command,
+
+    public void executeCommand( ShellClient client, String command,
             String... theseLinesMustExistRegEx ) throws Exception
     {
         CollectingOutput output = new CollectingOutput();
-        server.interpretLine( command, client.session(), output );
-        
+        client.evaluate( command, output );
+
         for ( String lineThatMustExist : theseLinesMustExistRegEx )
         {
             boolean negative = lineThatMustExist.startsWith( "!" );
@@ -152,7 +192,7 @@ public abstract class AbstractShellTest
         CollectingOutput output = new CollectingOutput();
         try
         {
-            shellServer.interpretLine( command, shellClient.session(), output );
+            shellClient.evaluate( command, output );
             fail( "Was expecting an exception" );
         }
         catch ( ShellException e )
@@ -164,12 +204,12 @@ public abstract class AbstractShellTest
             }
         }
     }
-    
+
     protected void assertRelationshipExists( Relationship relationship )
     {
         assertRelationshipExists( relationship.getId() );
     }
-    
+
     protected void assertRelationshipExists( long id )
     {
         try
@@ -181,12 +221,12 @@ public abstract class AbstractShellTest
             fail( "Relationship " + id + " should exist" );
         }
     }
-    
+
     protected void assertRelationshipDoesntExist( Relationship relationship )
     {
         assertRelationshipDoesntExist( relationship.getId() );
     }
-    
+
     protected void assertRelationshipDoesntExist( long id )
     {
         try
@@ -198,12 +238,12 @@ public abstract class AbstractShellTest
         { // Good
         }
     }
-    
+
     protected void assertNodeExists( Node node )
     {
         assertNodeExists( node.getId() );
     }
-    
+
     protected void assertNodeExists( long id )
     {
         try
@@ -215,12 +255,12 @@ public abstract class AbstractShellTest
             fail( "Node " + id + " should exist" );
         }
     }
-    
+
     protected void assertNodeDoesntExist( Node node )
     {
         assertNodeDoesntExist( node.getId() );
     }
-    
+
     protected void assertNodeDoesntExist( long id )
     {
         try
@@ -232,17 +272,17 @@ public abstract class AbstractShellTest
         { // Good
         }
     }
-    
+
     protected Relationship[] createRelationshipChain( int length )
     {
         return createRelationshipChain( RELATIONSHIP_TYPE, length );
     }
-    
+
     protected Relationship[] createRelationshipChain( RelationshipType type, int length )
     {
         return createRelationshipChain( db.getReferenceNode(), type, length );
     }
-    
+
     protected Relationship[] createRelationshipChain( Node startingFromNode, RelationshipType type,
             int length )
     {
@@ -259,7 +299,7 @@ public abstract class AbstractShellTest
         tx.finish();
         return rels;
     }
-    
+
     protected void deleteRelationship( Relationship relationship )
     {
         Transaction tx = db.beginTx();
@@ -267,7 +307,7 @@ public abstract class AbstractShellTest
         tx.success();
         tx.finish();
     }
-    
+
     protected void setProperty( Node node, String key, Object value )
     {
         Transaction tx = db.beginTx();

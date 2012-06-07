@@ -17,26 +17,25 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+
 package org.neo4j.shell;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.neo4j.helpers.collection.MapUtil.loadStrictly;
-import static org.neo4j.helpers.collection.MapUtil.stringMap;
-import static org.neo4j.kernel.Config.ENABLE_REMOTE_SHELL;
 import static org.neo4j.visualization.asciidoc.AsciidocHelper.createGraphVizWithNodeId;
 
-import java.io.File;
 import java.io.PrintWriter;
 
 import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.shell.impl.SameJvmClient;
+import org.neo4j.graphdb.factory.GraphDatabaseSetting;
+import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.shell.impl.ShellBootstrap;
 import org.neo4j.shell.impl.ShellServerExtension;
 import org.neo4j.shell.kernel.GraphDatabaseShellServer;
 import org.neo4j.test.ImpermanentGraphDatabase;
+import org.neo4j.test.TestGraphDatabaseFactory;
 
 public class ShellTest
 {
@@ -73,7 +72,11 @@ public class ShellTest
     public void testEnableRemoteShell() throws Exception
     {
         int port = 8085;
-        GraphDatabaseService graphDb = new ImpermanentGraphDatabase( stringMap( ENABLE_REMOTE_SHELL, "port=" + port ) );
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().
+            newImpermanentDatabaseBuilder().
+            setConfig( ShellSettings.remote_shell_enabled, GraphDatabaseSetting.TRUE ).
+            setConfig( ShellSettings.remote_shell_port, ""+port ).
+            newGraphDatabase();
         ShellLobby.newClient( port );
         graphDb.shutdown();
     }
@@ -81,7 +84,9 @@ public class ShellTest
     @Test
     public void testEnableServerOnDefaultPort() throws Exception
     {
-        GraphDatabaseService graphDb = new ImpermanentGraphDatabase( stringMap( ENABLE_REMOTE_SHELL, "true" ) );
+        GraphDatabaseService graphDb = new TestGraphDatabaseFactory().newImpermanentDatabaseBuilder().
+            setConfig( ShellSettings.remote_shell_enabled, GraphDatabaseSetting.TRUE ).
+            newGraphDatabase();
         try
         {
             ShellLobby.newClient();
@@ -95,31 +100,33 @@ public class ShellTest
     @Test
     public void canConnectAsAgent() throws Exception
     {
-        Integer port = Integer.valueOf( 1234 );
+        int port = 1234;
         String name = "test-shell";
         GraphDatabaseService graphDb = new ImpermanentGraphDatabase();
         try
         {
-            new ShellServerExtension().loadAgent( new ShellBootstrap( port.toString(), name ).serialize() );
+            new ShellServerExtension().loadAgent( new ShellBootstrap( port, name ).serialize() );
+
+            ShellClient client = ShellLobby.newClient( port, name );
+            client.evaluate( "" );
+            client.shutdown();
         }
         finally
         {
             graphDb.shutdown();
         }
-        ShellLobby.newClient( port.intValue(), name );
     }
 
     @Test
     public void testRemoveReferenceNode() throws Exception
     {
-        GraphDatabaseService db = new ImpermanentGraphDatabase();
+        GraphDatabaseAPI db = new ImpermanentGraphDatabase();
         final GraphDatabaseShellServer server = new GraphDatabaseShellServer( db, false );
-        ShellClient client = new SameJvmClient( server );
 
-        Documenter doc = new Documenter("sample session", client);
+        Documenter doc = new Documenter( "sample session", server );
         doc.add("pwd", "", "where are we?");
         doc.add("set name \"Jon\"", "", "On the current node, set the key \"name\" to value \"Jon\"");
-        doc.add("start n=node(0) return n", "Jon", "send a cypher query");
+        doc.add("start n=node(0) return n;", "Jon", "send a cypher query");
         doc.add("mkrel -c -d i -t LIKES --np \"{'app':'foobar'}\"", "", "make an incoming relationship of type LIKES, create the end node with the node properties specified.");
         doc.add("ls", "1", "where are we?");
         doc.add("cd 1", "", "change to the newly created node");
@@ -140,11 +147,11 @@ public class ShellTest
     @Test
     public void testMatrix() throws Exception
     {
-        GraphDatabaseService db = new ImpermanentGraphDatabase( loadStrictly( new File( "src/test/resources/autoindex.properties" ) ) );
+        GraphDatabaseAPI db = (GraphDatabaseAPI) new TestGraphDatabaseFactory().newImpermanentDatabaseBuilder()
+                .loadPropertiesFromURL( getClass().getResource( "/autoindex.properties" ) ).newGraphDatabase();
         final GraphDatabaseShellServer server = new GraphDatabaseShellServer( db, false );
-        ShellClient client = new SameJvmClient( server );
 
-        Documenter doc = new Documenter("a matrix example", client);
+        Documenter doc = new Documenter( "a matrix example", server );
         doc.add( "mkrel -t ROOT -c -v", "created",
         "create the Thomas Andersson node" );
         doc.add("cd 1", "", "go to the new node");

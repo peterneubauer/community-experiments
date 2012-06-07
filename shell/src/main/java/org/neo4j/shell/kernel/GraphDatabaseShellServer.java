@@ -21,12 +21,17 @@ package org.neo4j.shell.kernel;
 
 import java.io.Serializable;
 import java.rmi.RemoteException;
-import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
-import org.neo4j.kernel.EmbeddedReadOnlyGraphDatabase;
+import javax.transaction.Transaction;
+
+import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
+import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
+import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.shell.Output;
+import org.neo4j.shell.Response;
 import org.neo4j.shell.Session;
 import org.neo4j.shell.ShellException;
 import org.neo4j.shell.ShellServer;
@@ -42,13 +47,12 @@ import org.neo4j.shell.kernel.apps.GraphDatabaseApp;
  */
 public class GraphDatabaseShellServer extends SimpleAppServer
 {
-    private final GraphDatabaseService graphDb;
+    private final GraphDatabaseAPI graphDb;
     private final BashVariableInterpreter bashInterpreter;
     private boolean graphDbCreatedHere;
+    protected final Map<Serializable, Transaction> transactions = new ConcurrentHashMap<Serializable, Transaction>();
 
     /**
-     * @param graphDb the {@link GraphDatabaseService} instance to use with the
-     * shell server.
      * @throws RemoteException if an RMI error occurs.
      */
     public GraphDatabaseShellServer( String path, boolean readOnly, String configFileOrNull )
@@ -58,42 +62,93 @@ public class GraphDatabaseShellServer extends SimpleAppServer
         this.graphDbCreatedHere = true;
     }
 
-    public GraphDatabaseShellServer( GraphDatabaseService graphDb )
+    public GraphDatabaseShellServer( GraphDatabaseAPI graphDb )
             throws RemoteException
     {
         this( graphDb, false );
     }
 
-    public GraphDatabaseShellServer( GraphDatabaseService graphDb, boolean readOnly )
+    public GraphDatabaseShellServer( GraphDatabaseAPI graphDb, boolean readOnly )
             throws RemoteException
     {
         super();
         this.graphDb = readOnly ? new ReadOnlyGraphDatabaseProxy( graphDb ) : graphDb;
         this.bashInterpreter = new BashVariableInterpreter();
         this.bashInterpreter.addReplacer( "W", new WorkingDirReplacer() );
-        this.setProperty( AbstractClient.PROMPT_KEY, getShellPrompt() );
-        this.setProperty( AbstractClient.TITLE_KEYS_KEY,
-            ".*name.*,.*title.*" );
-        this.setProperty( AbstractClient.TITLE_MAX_LENGTH, "40" );
         this.graphDbCreatedHere = false;
     }
 
-    private static GraphDatabaseService instantiateGraphDb( String path, boolean readOnly,
-            String configFileOrNull )
+    /*
+     * Since we don't know which thread we might happen to run on, we can't trust transactions
+     * to be stored in threads. Instead, we keep them around here, and suspend/resume in
+     * transactions before apps get to run.
+     */
+    @Override
+    public Response interpretLine( Serializable clientId, String line, Output out ) throws ShellException
     {
-        Map<String, String> config = loadConfigFile( path, configFileOrNull );
-        return readOnly ? new EmbeddedReadOnlyGraphDatabase( path, config ) :
-                new EmbeddedGraphDatabase( path, config );
+        restoreTransaction( clientId );
+        try
+        {
+            return super.interpretLine( clientId, line, out );
+        } finally
+        {
+            saveTransaction( clientId );
+        }
     }
 
-    private static Map<String, String> loadConfigFile( String path, String configFileOrNull )
+    private void saveTransaction( Serializable clientId ) throws ShellException
     {
-        Map<String, String> result = null;
+        try
+        {
+            Transaction tx = getDb().getTxManager().suspend();
+            if ( tx == null )
+            {
+                transactions.remove( clientId );
+            } else {
+                transactions.put( clientId, tx );
+            }
+
+        } catch ( Exception e )
+        {
+            throw wrapException( e );
+        }
+    }
+
+    private void restoreTransaction( Serializable clientId ) throws ShellException
+    {
+        Transaction tx = transactions.get( clientId );
+        if ( tx != null )
+        {
+            try
+            {
+                getDb().getTxManager().resume( tx );
+            }
+            catch ( Exception e )
+            {
+                throw wrapException( e );
+            }
+        }
+    }
+
+    @Override
+    protected void initialPopulateSession( Session session )
+    {
+        session.set( AbstractClient.PROMPT_KEY, getShellPrompt() );
+        session.set( AbstractClient.TITLE_KEYS_KEY, ".*name.*,.*title.*" );
+        session.set( AbstractClient.TITLE_MAX_LENGTH, "40" );
+    }
+
+    private static GraphDatabaseAPI instantiateGraphDb( String path, boolean readOnly,
+                                                            String configFileOrNull )
+    {
+        GraphDatabaseBuilder builder = new GraphDatabaseFactory().
+                newEmbeddedDatabaseBuilder( path ).
+                setConfig( GraphDatabaseSettings.read_only, Boolean.toString( readOnly ) );
         if ( configFileOrNull != null )
         {
-            result = EmbeddedGraphDatabase.loadConfigurations( configFileOrNull );
+            builder.loadPropertiesFromFile( configFileOrNull );
         }
-        return result != null ? result : new HashMap<String, String>();
+        return (GraphDatabaseAPI) builder.newGraphDatabase();
     }
 
     protected String getShellPrompt()
@@ -108,29 +163,22 @@ public class GraphDatabaseShellServer extends SimpleAppServer
     }
 
     @Override
-    public String welcome()
+    protected String getWelcomeMessage()
     {
         return "Welcome to the Neo4j Shell! Enter 'help' for a list of commands";
     }
 
     @Override
-    public Serializable interpretVariable( String key, Serializable value,
-        Session session ) throws ShellException
+    protected String getPrompt( Session session ) throws ShellException
     {
-        Serializable result = value;
-        if ( key.equals( AbstractClient.PROMPT_KEY ) )
-        {
-            result = this.bashInterpreter.interpret( (String) value, this,
-                session );
-        }
-        return result;
+        return this.bashInterpreter.interpret( getShellPrompt(), this, session );
     }
 
     /**
-     * @return the {@link GraphDatabaseService} instance given in the
-     * constructor.
+     * @return the {@link GraphDatabaseAPI} instance given in the
+     *         constructor.
      */
-    public GraphDatabaseService getDb()
+    public GraphDatabaseAPI getDb()
     {
         return this.graphDb;
     }
@@ -142,17 +190,16 @@ public class GraphDatabaseShellServer extends SimpleAppServer
     public static class WorkingDirReplacer implements Replacer
     {
         public String getReplacement( ShellServer server, Session session )
-            throws ShellException
+                throws ShellException
         {
             try
             {
                 return GraphDatabaseApp.getDisplayName(
-                    ( GraphDatabaseShellServer ) server, session,
-                    GraphDatabaseApp.getCurrent(
-                        ( GraphDatabaseShellServer ) server, session ),
-                        false ).toString();
-            }
-            catch ( ShellException e )
+                        (GraphDatabaseShellServer) server, session,
+                        GraphDatabaseApp.getCurrent(
+                                (GraphDatabaseShellServer) server, session ),
+                        false );
+            } catch ( ShellException e )
             {
                 return GraphDatabaseApp.getDisplayNameForNonExistent();
             }

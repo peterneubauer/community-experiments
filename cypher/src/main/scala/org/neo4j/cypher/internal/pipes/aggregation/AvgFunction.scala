@@ -20,6 +20,7 @@
 package org.neo4j.cypher.internal.pipes.aggregation
 
 import org.neo4j.cypher.internal.commands.Expression
+import collection.Map
 
 class AvgFunction(val value: Expression)
   extends AggregationFunction
@@ -31,7 +32,11 @@ class AvgFunction(val value: Expression)
   private var count: Int = 0
   private var sofar: Any = 0
 
-  def result: Any = divide(sofar, count)
+  def result =
+    if (count > 0)
+      divide(sofar, count)
+    else
+      null
 
   def apply(data: Map[String, Any]) {
     actOnNumber(value(data), (number) => {

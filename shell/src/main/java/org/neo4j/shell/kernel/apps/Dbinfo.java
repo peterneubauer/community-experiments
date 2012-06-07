@@ -33,10 +33,10 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 import javax.management.openmbean.CompositeData;
 
-import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.jmx.Kernel;
-import org.neo4j.kernel.GraphDatabaseSPI;
+import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.shell.AppCommandParser;
+import org.neo4j.shell.Continuation;
 import org.neo4j.shell.OptionDefinition;
 import org.neo4j.shell.OptionValueType;
 import org.neo4j.shell.Output;
@@ -90,13 +90,13 @@ public class Dbinfo extends ReadOnlyGraphDatabaseApp
 
     private Kernel getKernel() throws ShellException
     {
-        GraphDatabaseService graphDb = getServer().getDb();
+        GraphDatabaseAPI graphDb = getServer().getDb();
         Kernel kernel = null;
-        if ( graphDb instanceof GraphDatabaseSPI )
+        if ( graphDb instanceof GraphDatabaseAPI )
         {
             try
             {
-                kernel = ( (GraphDatabaseSPI) graphDb ).getSingleManagementBean( Kernel.class );
+                kernel = graphDb.getSingleManagementBean( Kernel.class );
             }
             catch ( Exception e )
             {
@@ -110,7 +110,7 @@ public class Dbinfo extends ReadOnlyGraphDatabaseApp
     }
 
     @Override
-    protected String exec( AppCommandParser parser, Session session, Output out ) throws Exception
+    protected Continuation exec( AppCommandParser parser, Session session, Output out ) throws Exception
     {
         Kernel kernel = getKernel();
         boolean list = parser.options().containsKey( "l" ), get = parser.options().containsKey( "g" );
@@ -120,7 +120,7 @@ public class Dbinfo extends ReadOnlyGraphDatabaseApp
             getUsage( usage );
             usage.append( ".\n" );
             out.print( usage.toString() );
-            return null;
+            return Continuation.INPUT_COMPLETE;
         }
         MBeanServer mbeans = getPlatformMBeanServer();
         String bean = null;
@@ -139,7 +139,7 @@ public class Dbinfo extends ReadOnlyGraphDatabaseApp
             StringBuilder result = new StringBuilder();
             availableBeans( mbeans, kernel, result );
             out.print( result.toString() );
-            return null;
+            return Continuation.INPUT_COMPLETE;
         }
         ObjectName mbean;
         {
@@ -195,7 +195,7 @@ public class Dbinfo extends ReadOnlyGraphDatabaseApp
             }
             out.println( json.toString( 2 ) );
         }
-        return null;
+        return Continuation.INPUT_COMPLETE;
     }
 
     private void printAttribute( JSONObject json, Object value ) throws RemoteException, ShellException

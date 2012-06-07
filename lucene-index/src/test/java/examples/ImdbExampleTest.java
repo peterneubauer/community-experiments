@@ -46,35 +46,37 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.index.BatchInserterIndex;
-import org.neo4j.graphdb.index.BatchInserterIndexProvider;
+import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.graphdb.index.Index;
 import org.neo4j.graphdb.index.IndexHits;
 import org.neo4j.graphdb.index.IndexManager;
 import org.neo4j.graphdb.index.RelationshipIndex;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.index.Neo4jTestCase;
-import org.neo4j.index.impl.lucene.LuceneBatchInserterIndexProvider;
 import org.neo4j.index.impl.lucene.LuceneIndex;
 import org.neo4j.index.lucene.QueryContext;
 import org.neo4j.index.lucene.ValueContext;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
-import org.neo4j.kernel.impl.batchinsert.BatchInserter;
-import org.neo4j.kernel.impl.batchinsert.BatchInserterImpl;
+import org.neo4j.kernel.impl.cache.WeakCacheProvider;
 import org.neo4j.test.AsciiDocGenerator;
-import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.TargetDirectory;
+import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.unsafe.batchinsert.BatchInserter;
+import org.neo4j.unsafe.batchinsert.BatchInserterIndex;
+import org.neo4j.unsafe.batchinsert.BatchInserterIndexProvider;
+import org.neo4j.unsafe.batchinsert.BatchInserters;
+import org.neo4j.unsafe.batchinsert.LuceneBatchInserterIndexProvider;
 import org.neo4j.visualization.asciidoc.AsciidocHelper;
 
 public class ImdbExampleTest
 {
-    private static EmbeddedGraphDatabase graphDb;
+    private static GraphDatabaseService graphDb;
     private Transaction tx;
 
     @BeforeClass
     public static void setUpDb()
     {
-        graphDb = new ImpermanentGraphDatabase();
+        graphDb = new TestGraphDatabaseFactory().newImpermanentDatabaseBuilder().setConfig( GraphDatabaseSettings.cache_type, WeakCacheProvider.NAME ).newGraphDatabase();
         Transaction transaction = graphDb.beginTx();
         try
         {
@@ -88,50 +90,49 @@ public class ImdbExampleTest
             // START SNIPPET: createNodes
             // Actors
             Node reeves = graphDb.createNode();
-            actors.add( reeves, "name", "Keanu Reeves" );
+            reeves.setProperty( "name", "Keanu Reeves" );
+            actors.add( reeves, "name", reeves.getProperty( "name" ) );
             Node bellucci = graphDb.createNode();
-            actors.add( bellucci, "name", "Monica Bellucci" );
-            // multiple values for a field
+            bellucci.setProperty( "name", "Monica Bellucci" );
+            actors.add( bellucci, "name", bellucci.getProperty( "name" ) );
+            // multiple values for a field, in this case for search only
+            // and not stored as a property.
             actors.add( bellucci, "name", "La Bellucci" );
             // Movies
             Node theMatrix = graphDb.createNode();
-            movies.add( theMatrix, "title", "The Matrix" );
-            movies.add( theMatrix, "year", 1999 );
-            Node theMatrixReloaded = graphDb.createNode();
-            movies.add( theMatrixReloaded, "title", "The Matrix Reloaded" );
-            movies.add( theMatrixReloaded, "year", 2003 );
-            Node malena = graphDb.createNode();
-            movies.add( malena, "title", "Malèna" );
-            movies.add( malena, "year", 2000 );
-            // END SNIPPET: createNodes
-
-            reeves.setProperty( "name", "Keanu Reeves" );
-            bellucci.setProperty( "name", "Monica Bellucci" );
             theMatrix.setProperty( "title", "The Matrix" );
             theMatrix.setProperty( "year", 1999 );
+            movies.add( theMatrix, "title", theMatrix.getProperty( "title" ) );
+            movies.add( theMatrix, "year", theMatrix.getProperty( "year" ) );
+            Node theMatrixReloaded = graphDb.createNode();
             theMatrixReloaded.setProperty( "title", "The Matrix Reloaded" );
             theMatrixReloaded.setProperty( "year", 2003 );
+            movies.add( theMatrixReloaded, "title", theMatrixReloaded.getProperty( "title" )  );
+            movies.add( theMatrixReloaded, "year", 2003 );
+            Node malena = graphDb.createNode();
             malena.setProperty( "title", "Malèna" );
             malena.setProperty( "year", 2000 );
+            movies.add( malena, "title", malena.getProperty( "title" ) );
+            movies.add( malena, "year", malena.getProperty( "year" ) );
+            // END SNIPPET: createNodes
 
             // START SNIPPET: createRelationships
             // we need a relationship type
             DynamicRelationshipType ACTS_IN = DynamicRelationshipType.withName( "ACTS_IN" );
             // create relationships
             Relationship role1 = reeves.createRelationshipTo( theMatrix, ACTS_IN );
-            roles.add( role1, "name", "Neo" );
-            Relationship role2 = reeves.createRelationshipTo( theMatrixReloaded, ACTS_IN );
-            roles.add( role2, "name", "Neo" );
-            Relationship role3 = bellucci.createRelationshipTo( theMatrixReloaded, ACTS_IN );
-            roles.add( role3, "name", "Persephone" );
-            Relationship role4 = bellucci.createRelationshipTo( malena, ACTS_IN );
-            roles.add( role4, "name", "Malèna Scordia" );
-            // END SNIPPET: createRelationships
-
             role1.setProperty( "name", "Neo" );
+            roles.add( role1, "name", role1.getProperty( "name" ) );
+            Relationship role2 = reeves.createRelationshipTo( theMatrixReloaded, ACTS_IN );
             role2.setProperty( "name", "Neo" );
+            roles.add( role2, "name", role2.getProperty( "name" ) );
+            Relationship role3 = bellucci.createRelationshipTo( theMatrixReloaded, ACTS_IN );
             role3.setProperty( "name", "Persephone" );
+            roles.add( role3, "name", role3.getProperty( "name" ) );
+            Relationship role4 = bellucci.createRelationshipTo( malena, ACTS_IN );
             role4.setProperty( "name", "Malèna Scordia" );
+            roles.add( role4, "name", role4.getProperty( "name" ) );
+            // END SNIPPET: createRelationships
 
             transaction.success();
         }
@@ -185,7 +186,7 @@ public class ImdbExampleTest
     @Test
     public void deleteIndex()
     {
-        GraphDatabaseService graphDb = new EmbeddedGraphDatabase( TargetDirectory.forTest( getClass() ).directory( "delete", true ).getAbsolutePath() );
+        GraphDatabaseService graphDb = new GraphDatabaseFactory().newEmbeddedDatabase( TargetDirectory.forTest( getClass() ).directory( "delete", true ).getAbsolutePath() );
         Transaction transaction = graphDb.beginTx();
         try
         {
@@ -255,6 +256,7 @@ public class ImdbExampleTest
 
         // START SNIPPET: update
         // create a node with a property
+        // so we have something to update later on
         Node fishburn = graphDb.createNode();
         fishburn.setProperty( "name", "Fishburn" );
         // index it
@@ -266,6 +268,7 @@ public class ImdbExampleTest
 
         // START SNIPPET: update
         // update the index entry
+        // when the property value changes
         actors.remove( fishburn, "name", fishburn.getProperty( "name" ) );
         fishburn.setProperty( "name", "Laurence Fishburn" );
         actors.add( fishburn, "name", fishburn.getProperty( "name" ) );
@@ -482,7 +485,8 @@ public class ImdbExampleTest
         assertEquals( theMatrix, hits.getSingle() );
 
         // START SNIPPET: defaultOperator
-        QueryContext query = new QueryContext( "title:*Matrix* year:1999" ).defaultOperator( Operator.AND );
+        QueryContext query = new QueryContext( "title:*Matrix* year:1999" )
+                .defaultOperator( Operator.AND );
         hits = movies.query( query );
         // END SNIPPET: defaultOperator
         // with OR the result would be 2 hits
@@ -599,9 +603,11 @@ public class ImdbExampleTest
         Neo4jTestCase.deleteFileOrDirectory( new File(
                 "target/neo4jdb-batchinsert" ) );
         // START SNIPPET: batchInsert
-        BatchInserter inserter = new BatchInserterImpl( "target/neo4jdb-batchinsert" );
-        BatchInserterIndexProvider indexProvider = new LuceneBatchInserterIndexProvider( inserter );
-        BatchInserterIndex actors = indexProvider.nodeIndex( "actors", MapUtil.stringMap( "type", "exact" ) );
+        BatchInserter inserter = BatchInserters.inserter( "target/neo4jdb-batchinsert" );
+        BatchInserterIndexProvider indexProvider = 
+                new LuceneBatchInserterIndexProvider( inserter );
+        BatchInserterIndex actors = 
+                indexProvider.nodeIndex( "actors", MapUtil.stringMap( "type", "exact" ) );
         actors.setCacheCapacity( "name", 100000 );
 
         Map<String, Object> properties = MapUtil.map( "name", "Keanu Reeves" );
@@ -611,13 +617,12 @@ public class ImdbExampleTest
         //make the changes visible for reading, use this sparsely, requires IO!
         actors.flush();
         
-        // Make sure to shut down the index provider
+        // Make sure to shut down the index provider as well
         indexProvider.shutdown();
         inserter.shutdown();
         // END SNIPPET: batchInsert
 
-        GraphDatabaseService db = new EmbeddedGraphDatabase(
-                "target/neo4jdb-batchinsert" );
+        GraphDatabaseService db = new GraphDatabaseFactory().newEmbeddedDatabase( "target/neo4jdb-batchinsert" );
         Index<Node> index = db.index()
                 .forNodes( "actors" );
         Node reeves = index.get( "name", "Keanu Reeves" )
@@ -626,3 +631,4 @@ public class ImdbExampleTest
         db.shutdown();
     }
 }
+

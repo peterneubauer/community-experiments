@@ -21,7 +21,7 @@ package org.neo4j.cypher
 
 import org.scalatest.junit.JUnitSuite
 import org.junit.Assert._
-import org.junit.Test
+import org.junit.{Test}
 
 class SyntaxExceptionTest extends JUnitSuite {
   def expectError(query: String, expectedError: String) {
@@ -69,13 +69,13 @@ class SyntaxExceptionTest extends JUnitSuite {
   @Test def shouldRaiseErrorWhenMissingReturn() {
     expectError(
       "start s = node(0)",
-      "expected return clause")
+      "Non-mutating queries must return data")
   }
 
   @Test def shouldWarnAboutMissingStart() {
     expectError(
       "where s.name = Name and s.age = 10 return s",
-      "expected 'START'")
+      "expected START or CREATE")
   }
 
   @Test def shouldComplainAboutWholeNumbers() {
@@ -87,13 +87,13 @@ class SyntaxExceptionTest extends JUnitSuite {
   @Test def matchWithoutIdentifierHasToHaveParenthesis() {
     expectError(
       "start a = node(0) match a--b, --> a return a",
-      "expected identifier")
+      "expected an expression that is a node")
   }
 
   @Test def matchWithoutIdentifierHasToHaveParenthesis2() {
     expectError(
       "start a = node(0) match (a) -->, a-->b return a",
-      "expected node identifier")
+      "expected an expression that is a node")
   }
 
 
@@ -112,7 +112,7 @@ class SyntaxExceptionTest extends JUnitSuite {
   @Test def shortestPathCanNotHaveMultipleLinksInIt() {
     expectError(
       "start a=node(0), b=node(1) match p=shortestPath(a-->()-->b) return p",
-      "expected single path segment")
+      "Wrong number of parameters for function shortestPath")
   }
 
   @Test def oldNodeSyntaxGivesHelpfulError() {
@@ -170,13 +170,20 @@ class SyntaxExceptionTest extends JUnitSuite {
       "unknown function")
   }
 
-  @Test def nodeParenthesisMustBeClosed() {
-    expectError(
-      "start s=node(1) match s-->(x return x",
-      "Unclosed parenthesis")
+  @Test def handlesMultilineQueries() {
+    expectError("""start
+    a=node(0),
+    b=node(0),
+    c=node(0),
+    d=node(0),
+    e=node(0),
+    f=node(0),
+    g=node(0),
+    s=node:index(key = value) return s""",
+      "string literal or parameter expected")
   }
 
-  @Test def handlesMultilineQueries() {
+  @Test def createNodeWithout() {
     expectError("""start
     a=node(0),
     b=node(0),

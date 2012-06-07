@@ -25,9 +25,11 @@ abstract class CypherException(message: String, cause: Throwable) extends Runtim
   def this(message:String) = this(message, null)
 }
 
-class EntityNotFoundException(message:String, cause:Throwable) extends CypherException(message, cause)
+class RelatePathNotUnique(message:String) extends CypherException(message)
 
-class CypherTypeException(message:String) extends CypherException(message,null)
+class EntityNotFoundException(message:String, cause:Throwable=null) extends CypherException(message, cause)
+
+class CypherTypeException(message: String, cause: Throwable = null) extends CypherException(message, cause)
 
 class IterableRequiredException(message:String, cause:Throwable) extends CypherException(message, cause) {
   def this(message:String) = this(message, null)
@@ -43,3 +45,9 @@ class ParameterWrongTypeException(message:String, cause:Throwable) extends Cyphe
 }
 
 class PatternException(message:String) extends CypherException(message, null)
+
+class InternalException(message:String, inner:Exception=null) extends CypherException(message, inner)
+
+class MissingIndexException(indexName:String) extends CypherException("Index `" + indexName + "` does not exist")
+
+class NodeStillHasRelationshipsException(val nodeId:Long, cause:Throwable) extends CypherException("Node with id " + nodeId + " still has relationships, and can not be deleted.")

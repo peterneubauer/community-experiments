@@ -23,28 +23,29 @@ import org.neo4j.cypher.{SyntaxException, IterableRequiredException}
 import scala.collection.JavaConverters._
 import org.neo4j.cypher.internal.symbols._
 import org.neo4j.graphdb.{Node, Relationship, Path}
+import collection.Map
 
 trait Functions
 
 abstract class NullInNullOutExpression(argument: Expression) extends Expression {
-  def inner_apply(value: Any, m: Map[String, Any]): Any
+  def compute(value: Any, m: Map[String, Any]): Any
 
-  def apply(m: Map[String, Any]): Any = argument(m) match {
+  def compute(m: Map[String, Any]): Any = argument(m) match {
     case null => null
-    case x => inner_apply(x, m)
+    case x => compute(x, m)
   }
 }
 
-case class ExtractFunction(iterable: Expression, id: String, expression: Expression) extends NullInNullOutExpression(iterable) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
-    case x: Iterable[Any] => x.map(iterValue => {
+case class ExtractFunction(iterable: Expression, id: String, expression: Expression)
+  extends NullInNullOutExpression(iterable)
+  with IterableSupport
+{
+  def compute(value: Any, m: Map[String, Any]) = makeTraversable(value).map(iterValue => {
       val innerMap = m + (id -> iterValue)
       expression(innerMap)
     }).toList
-    case _ => throw new IterableRequiredException(iterable)
-  }
 
-  def identifier = Identifier("extract(" + id + " in " + iterable.identifier.name + " : " + expression.identifier.name + ")", new IterableType(expression.identifier.typ))
+  val identifier = Identifier("extract(" + id + " in " + iterable.identifier.name + " : " + expression.identifier.name + ")", new IterableType(expression.identifier.typ))
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] =
   // Extract depends on everything that the iterable and the expression depends on, except
@@ -60,12 +61,12 @@ case class ExtractFunction(iterable: Expression, id: String, expression: Express
 }
 
 case class RelationshipFunction(path: Expression) extends NullInNullOutExpression(path) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
+  def compute(value: Any, m: Map[String, Any]) = value match {
     case p: Path => p.relationships().asScala.toSeq
     case x => throw new SyntaxException("Expected " + path.identifier.name + " to be a path.")
   }
 
-  def identifier = Identifier("RELATIONSHIPS(" + path.identifier.name + ")", new IterableType(RelationshipType()))
+  val identifier = Identifier("RELATIONSHIPS(" + path.identifier.name + ")", new IterableType(RelationshipType()))
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] = path.dependencies(PathType())
 
@@ -78,17 +79,17 @@ case class RelationshipFunction(path: Expression) extends NullInNullOutExpressio
 }
 
 case class CoalesceFunction(expressions: Expression*) extends Expression {
-  def apply(m: Map[String, Any]): Any = expressions.map(expression => expression(m)).find(value => value != null) match {
+  def compute(m: Map[String, Any]): Any = expressions.toStream.map(expression => expression(m)).find(value => value != null) match {
     case None => null
     case Some(x) => x
   }
 
   def innerExpectedType: Option[AnyType] = None
 
-  def argumentsString: String = expressions.map(_.identifier.name).mkString(",")
+  val argumentsString: String = expressions.map(_.identifier.name).mkString(",")
 
   //TODO: Find out the closest matching return type
-  def identifier = Identifier("COALESCE(" + argumentsString + ")", AnyType())
+  val identifier = Identifier("COALESCE(" + argumentsString + ")", AnyType())
 
   override def toString() = "coalesce(" + argumentsString + ")"
 
@@ -103,7 +104,7 @@ case class CoalesceFunction(expressions: Expression*) extends Expression {
 }
 
 case class RelationshipTypeFunction(relationship: Expression) extends NullInNullOutExpression(relationship) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value.asInstanceOf[Relationship].getType.name()
+  def compute(value: Any, m: Map[String, Any]) = value.asInstanceOf[Relationship].getType.name()
 
   lazy val identifier = Identifier("TYPE(" + relationship.identifier.name + ")", StringType())
 
@@ -117,20 +118,16 @@ case class RelationshipTypeFunction(relationship: Expression) extends NullInNull
     relationship.filter(f)
 }
 
-case class LengthFunction(inner: Expression) extends NullInNullOutExpression(inner) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
+case class LengthFunction(inner: Expression) extends NullInNullOutExpression(inner) with IterableSupport {
+  def compute(value: Any, m: Map[String, Any]) = value match {
     case path: Path => path.length()
-    case iter: Traversable[_] => iter.toList.length
     case s: String => s.length()
-    case x => throw new IterableRequiredException(inner)
+    case x => makeTraversable(x).toSeq.length
   }
 
-  def identifier = Identifier("LENGTH(" + inner.identifier.name + ")", IntegerType())
+  val identifier = Identifier("LENGTH(" + inner.identifier.name + ")", IntegerType())
 
-  def declareDependencies(extectedType: AnyType): Seq[Identifier] = {
-    val seq = inner.dependencies(AnyIterableType()).toList
-    seq
-  }
+  def declareDependencies(extectedType: AnyType): Seq[Identifier] = inner.dependencies(AnyIterableType()).toList
 
   def rewrite(f: (Expression) => Expression) = f(LengthFunction(inner.rewrite(f)))
 
@@ -142,12 +139,12 @@ case class LengthFunction(inner: Expression) extends NullInNullOutExpression(inn
 
 case class IdFunction(inner: Expression) extends NullInNullOutExpression(inner) {
 
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
+  def compute(value: Any, m: Map[String, Any]) = value match {
     case node: Node => node.getId
     case rel: Relationship => rel.getId
   }
 
-  def identifier = Identifier("ID(" + inner.identifier.name + ")", LongType())
+  val identifier = Identifier("ID(" + inner.identifier.name + ")", LongType())
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] = inner.dependencies(MapType())
 
@@ -159,20 +156,21 @@ case class IdFunction(inner: Expression) extends NullInNullOutExpression(inner) 
     inner.filter(f)
 }
 
-case class HeadFunction(collection: Expression) extends NullInNullOutExpression(collection) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
-    case path: Path => path.startNode()
-    case iter: Traversable[_] => iter.head
-    case array: Array[_] => array.head
-    case x => throw new IterableRequiredException(collection)
+case class HeadFunction(collection: Expression) extends NullInNullOutExpression(collection) with IterableSupport {
+  def compute(value: Any, m: Map[String, Any]) = makeTraversable(value).head
+
+  private def myType = {
+    println(collection.identifier.typ)
+
+    collection.identifier.typ match {
+      case x: IterableType => x.iteratedType
+      case _ => ScalarType()
+    }
   }
 
-  private def myType = collection.identifier.typ match {
-    case x: IterableType => x.iteratedType
-    case _ => ScalarType()
-  }
+  override def dependencies(extectedType: AnyType): Seq[Identifier] = declareDependencies(extectedType)
 
-  def identifier = Identifier("head(" + collection.identifier.name + ")", myType)
+  val identifier = Identifier("head(" + collection.identifier.name + ")", myType)
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] = collection.dependencies(AnyIterableType())
 
@@ -184,19 +182,14 @@ case class HeadFunction(collection: Expression) extends NullInNullOutExpression(
     collection.filter(f)
 }
 
-case class LastFunction(collection: Expression) extends NullInNullOutExpression(collection) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
-    case path: Path => path.endNode()
-    case iter: Traversable[_] => iter.last
-    case array: Array[_] => array.last
-    case x => throw new IterableRequiredException(collection)
-  }
+case class LastFunction(collection: Expression) extends NullInNullOutExpression(collection) with IterableSupport {
+  def compute(value: Any, m: Map[String, Any]) = makeTraversable(value).last
 
-  def identifier = Identifier("last(" + collection.identifier.name + ")", ScalarType())
+  val identifier = Identifier("last(" + collection.identifier.name + ")", ScalarType())
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] = collection.dependencies(AnyIterableType())
 
-  def rewrite(f: (Expression) => Expression) = f(HeadFunction(collection.rewrite(f)))
+  def rewrite(f: (Expression) => Expression) = f(LastFunction(collection.rewrite(f)))
 
   def filter(f: (Expression) => Boolean) = if (f(this))
     Seq(this) ++ collection.filter(f)
@@ -204,19 +197,14 @@ case class LastFunction(collection: Expression) extends NullInNullOutExpression(
     collection.filter(f)
 }
 
-case class TailFunction(collection: Expression) extends NullInNullOutExpression(collection) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
-    case path: Path => path.iterator().asScala.toSeq.tail
-    case iter: Traversable[_] => iter.tail
-    case array: Array[_] => array.tail
-    case x => throw new IterableRequiredException(collection)
-  }
+case class TailFunction(collection: Expression) extends NullInNullOutExpression(collection) with IterableSupport {
+  def compute(value: Any, m: Map[String, Any]) = makeTraversable(value).tail
 
-  def identifier = Identifier("tail(" + collection.identifier.name + ")", collection.identifier.typ)
+  val identifier = Identifier("tail(" + collection.identifier.name + ")", collection.identifier.typ)
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] = collection.dependencies(AnyIterableType())
 
-  def rewrite(f: (Expression) => Expression) = f(HeadFunction(collection.rewrite(f)))
+  def rewrite(f: (Expression) => Expression) = f(TailFunction(collection.rewrite(f)))
 
   def filter(f: (Expression) => Boolean) = if (f(this))
     Seq(this) ++ collection.filter(f)
@@ -225,12 +213,12 @@ case class TailFunction(collection: Expression) extends NullInNullOutExpression(
 }
 
 case class NodesFunction(path: Expression) extends NullInNullOutExpression(path) {
-  def inner_apply(value: Any, m: Map[String, Any]) = value match {
+  def compute(value: Any, m: Map[String, Any]) = value match {
     case p: Path => p.nodes().asScala.toSeq
     case x => throw new SyntaxException("Expected " + path.identifier.name + " to be a path.")
   }
 
-  def identifier = Identifier("NODES(" + path.identifier.name + ")", new IterableType(NodeType()))
+  val identifier = Identifier("NODES(" + path.identifier.name + ")", new IterableType(NodeType()))
 
   def declareDependencies(extectedType: AnyType): Seq[Identifier] = path.dependencies(PathType())
 
@@ -242,28 +230,17 @@ case class NodesFunction(path: Expression) extends NullInNullOutExpression(path)
     path.filter(f)
 }
 
-case class FilterFunction(collection: Expression, symbol: String, predicate: Predicate) extends NullInNullOutExpression(collection) {
-  def inner_apply(value: Any, m: Map[String, Any]) = {
-    val seq = value match {
-      case path: Path => path.iterator().asScala.toSeq
-      case iter: Traversable[_] => iter.toSeq
-      case array: Array[_] => array.toSeq
-      case x => throw new IterableRequiredException(collection)
-    }
+case class FilterFunction(collection: Expression, symbol: String, predicate: Predicate)
+  extends NullInNullOutExpression(collection)
+  with IterableSupport
+{
+  def compute(value: Any, m: Map[String, Any]) = makeTraversable(value).filter(element => predicate.isMatch(m + (symbol -> element)))
 
-    val result = seq.filter {
-      case element => predicate.isMatch(m + (symbol -> element))
-    }
+  val identifier = Identifier("filter(%s in %s : %s)".format(symbol, collection.identifier.name, predicate), collection.identifier.typ)
 
-    result
-  }
+  def declareDependencies(extectedType: AnyType): Seq[Identifier] = (collection.dependencies(AnyIterableType()) ++ predicate.dependencies).filterNot(_.name == symbol)
 
-  def identifier = Identifier("filter(%s in %s : %s)".format(symbol, collection, predicate), collection.identifier.typ)
-
-  def declareDependencies(extectedType: AnyType): Seq[Identifier] = (collection.dependencies(PathType()) ++ predicate.dependencies).filterNot(_.name == symbol)
-
-  //TODO: Uh oh. Predicates don't do rewriting. Revisit while making predicates full on expressions
-  def rewrite(f: (Expression) => Expression) = f(FilterFunction(collection.rewrite(f), symbol, predicate))
+  def rewrite(f: (Expression) => Expression) = f(FilterFunction(collection.rewrite(f), symbol, predicate.rewrite(f)))
 
   def filter(f: (Expression) => Boolean) = if (f(this))
     Seq(this) ++ collection.filter(f)

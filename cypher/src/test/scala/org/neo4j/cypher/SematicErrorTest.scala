@@ -60,17 +60,17 @@ class SematicErrorTest extends ExecutionEngineHelper {
 
   @Test def shouldKnowNotToCompareStringsAndNumbers() {
     expectedError("start a=node(0) where a.age =~ 13 return a",
-      "13.0 expected to be of type StringType but it is of type NumberType")
+      "13 expected to be of type StringType but it is of type NumberType")
   }
 
   @Test def shouldComplainAboutUnknownIdentifier() {
     expectedError("start s = node(1) where s.name = Name and s.age = 10 return s",
-      "Unknown identifier `Name`.")
+      "Unknown identifier `Name`")
   }
 
   @Test def shortestPathNeedsBothEndNodes() {
     expectedError("start n=node(0) match p=shortestPath(n-->b) return p",
-      "To find a shortest path, both ends of the path need to be provided. Couldn't find `b`")
+      "Unknown identifier `b`")
   }
 
   def expectedError(query: String, message: String) {

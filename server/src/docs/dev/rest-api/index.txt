@@ -83,6 +83,8 @@ include::property-values-can-not-be-nested.txt[]
 
 include::delete-all-properties-from-node.txt[]
 
+include::delete-a-named-property-from-a-node.txt[]
+
 [[rest-api-relationship-properties]]
 == Relationship properties ==
 
@@ -152,6 +154,8 @@ include::add-a-relationship-to-an-index-unless-a-relationship-already-exists-for
 [[rest-api-auto-indexes]]
 == Automatic Indexes ==
 
+To enable automatic indexes in neo4j, set up the database for that, see <<auto-indexing-config>>. With this feature enabled, you can then index and query nodes in these indexes.
+
 include::find-node-by-exact-match-from-an-automatic-index.txt[]
 
 include::find-node-by-query-from-an-automatic-index.txt[]
@@ -192,6 +196,18 @@ In case you're curious how this works, on the server side it triggers the creati
 
 [CAUTION]
 You have to do this early in your server lifecycle, before any normal auto indexes are created.
+
+There are a few REST calls providing a REST interface to the http://components.neo4j.org/neo4j/{neo4j-version}/apidocs/org/neo4j/graphdb/index/AutoIndexer.html[AutoIndexer] component. The following REST calls work both, for `node` and `relationship` by simply changing the respective part of the URL.
+
+include::get-current-status-for-autoindexing-on-nodes.txt[]
+
+include::enable-node-autoindexing.txt[]
+
+include::lookup-list-of-properties-being-autoindexed.txt[]
+
+include::add-a-property-for-autoindexing-on-nodes.txt[]
+
+include::remove-a-property-for-autoindexing-on-nodes.txt[]
 
 [[rest-api-traverse]]
 == Traversals ==
@@ -262,3 +278,31 @@ include::execute-multiple-operations-in-batch.txt[]
 
 include::refer-to-items-created-earlier-in-the-same-batch-job.txt[]
 
+include::execute-multiple-operations-in-batch-streaming.txt[]
+
+[[rest-api-wadl-support]]
+== WADL Support ==
+
+The Neo4j REST API is a truly RESTful interface relying on hypermedia controls (links) to advertise permissible
+actions to users. Hypermedia is a dynamic interface style where declarative constructs (semantic markup) are used
+to inform clients of their next legal choices just in time.
+
+[CAUTION]
+RESTful APIs cannot be modelled by static interface description languages like WSDL or WADL.
+
+However for some use cases, developers may wish to expose WADL descriptions of the Neo4j REST API, particularly when
+using tooling that expects such.
+
+In those cases WADL generation may be enabled by adding to your server's +neo4j.properties+ file:
+
+[source]
+----
+unsupported_wadl_generation_enabled=true
+----
+
+[CAUTION]
+WADL is not an officially supported part of the Neo4j server API because WADL is insufficiently expressive to capture
+the set of potential interactions a client can drive with Neo4j server. Expect the WADL description to be incomplete,
+and in some cases contradictory to the real API. In any cases where the WADL description disagrees with the REST API,
+the REST API should be considered authoritative. WADL generation may be withdrawn at any point in the Neo4j release
+cycle.

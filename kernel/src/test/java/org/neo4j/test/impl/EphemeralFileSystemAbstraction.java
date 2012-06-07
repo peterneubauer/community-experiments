@@ -45,9 +45,9 @@ import static java.lang.Math.max;
 import static java.lang.Math.min;
 
 import org.neo4j.helpers.collection.PrefetchingIterator;
-import org.neo4j.kernel.Lifecycle;
 import org.neo4j.kernel.impl.nioneo.store.FileLock;
 import org.neo4j.kernel.impl.nioneo.store.FileSystemAbstraction;
+import org.neo4j.kernel.lifecycle.Lifecycle;
 
 import static org.neo4j.helpers.collection.IteratorUtil.loop;
 
@@ -86,10 +86,9 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
         super.finalize();
     }
 
-    @SuppressWarnings( "deprecation" )
     public void assertNoOpenFiles() throws Exception
     {
-        List<Throwable> open = new ArrayList<Throwable>();
+        List<FileStillOpenException> open = new ArrayList<FileStillOpenException>();
         for ( EphemeralFileData file : files.values() )
         {
             for ( EphemeralFileChannel channel : loop( file.getOpenChannels() ) )
@@ -97,11 +96,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
                 open.add( channel.openedAt );
             }
         }
-        if (!open.isEmpty())
-        {
-            if (open.size() == 1) throw (FileStillOpenException) open.get( 0 );
-            throw new org.junit.internal.runners.model.MultipleFailureException( open );
-        }
+        MultipleExceptionsStrategy.assertEmptyExceptions( open );
     }
 
     @SuppressWarnings( "serial" )
@@ -180,6 +175,16 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
         if (files.containsKey(to)) throw new IOException("'" + to + "' already exists");
         files.put(to, files.remove(from));
         return true;
+    }
+
+    @Override
+    public void copyFile( String from, String to ) throws IOException
+    {
+        if ( !files.containsKey( from ) )
+            throw new IOException( "'" + from + "' doesn't exist" );
+        if ( files.containsKey( to ) )
+            throw new IOException( "'" + to + "' already exists" );
+        files.put( to, files.get( from ).clone() );
     }
 
     private static class EphemeralFileChannel extends FileChannel
@@ -346,6 +351,14 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
             return available; // return how much data was read
         }
 
+        @Override
+        public EphemeralFileData clone()
+        {
+            EphemeralFileData copy = new EphemeralFileData();
+            copy.size = size;
+            return copy;
+        }
+
         void open( EphemeralFileChannel channel )
         {
             channels.add( new WeakReference<EphemeralFileChannel>( channel ) );
@@ -496,6 +509,12 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
             init();
         }
 
+        @Override
+        public DynamicByteBuffer clone()
+        {
+            return new DynamicByteBuffer( buf );
+        }
+
         private static void destroyDirectByteBuffer(ByteBuffer toBeDestroyed)
             throws IllegalArgumentException, IllegalAccessException,
                    InvocationTargetException, SecurityException, NoSuchMethodException
@@ -526,6 +545,37 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
         public DynamicByteBuffer()
         {
             buf = allocate( 0 );
+        }
+
+        private DynamicByteBuffer( ByteBuffer toClone )
+        {
+            int sizeIndex = toClone.capacity() / SIZES[SIZES.length - 1];
+            buf = allocate( sizeIndex );
+            copyByteBufferContents( toClone, buf );
+        }
+
+        private void copyByteBufferContents( ByteBuffer from, ByteBuffer to )
+        {
+            int positionBefore = from.position();
+            int limitBefore = from.limit();
+            byte[] scratchPad = new byte[8096];
+            try
+            {
+                from.position( 0 );
+                while ( from.remaining() > 0 )
+                {
+                    int bytes = Math.min( scratchPad.length, from.remaining() );
+                    from.get( scratchPad, 0, bytes );
+                    to.put( scratchPad, 0, bytes );
+                }
+            }
+            finally
+            {
+                from.limit( limitBefore );
+                from.position( positionBefore );
+                to.limit( limitBefore );
+                to.position( 0 );
+            }
         }
 
         /**
@@ -602,7 +652,7 @@ public class EphemeralFileSystemAbstraction implements FileSystemAbstraction, Li
         {
             buf.position( pos );
             verifySize(length);
-            buf.put(bytes, offset, length);
+            buf.put( bytes, offset, length );
         }
 
         void get(int pos, byte[] scratchPad, int i, int howMuchToReadThisTime)

@@ -19,6 +19,12 @@
  */
 package org.neo4j.kernel.impl.transaction.xaframework;
 
+import static java.lang.Math.max;
+import static org.neo4j.kernel.impl.transaction.xaframework.LogExtractor.newLogReaderBuffer;
+import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLogTokens.CLEAN;
+import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLogTokens.LOG1;
+import static org.neo4j.kernel.impl.transaction.xaframework.XaLogicalLogTokens.LOG2;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -35,8 +41,6 @@ import java.util.regex.Pattern;
 import javax.transaction.xa.XAException;
 import javax.transaction.xa.Xid;
 
-import static java.lang.Math.max;
-
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.Pair;
 import org.neo4j.kernel.impl.nioneo.store.FileSystemAbstraction;
@@ -49,8 +53,6 @@ import org.neo4j.kernel.impl.util.ArrayMap;
 import org.neo4j.kernel.impl.util.BufferedFileChannel;
 import org.neo4j.kernel.impl.util.FileUtils;
 import org.neo4j.kernel.impl.util.StringLogger;
-
-import static org.neo4j.kernel.impl.transaction.xaframework.LogExtractor.newLogReaderBuffer;
 
 /**
  * <CODE>XaLogicalLog</CODE> is a transaction and logical log combined. In
@@ -75,10 +77,6 @@ import static org.neo4j.kernel.impl.transaction.xaframework.LogExtractor.newLogR
 public class XaLogicalLog implements LogLoader
 {
     private final Logger log;
-
-    private static final char CLEAN = 'C';
-    private static final char LOG1 = '1';
-    private static final char LOG2 = '2';
 
     private FileChannel fileChannel = null;
     private final ByteBuffer sharedBuffer;
@@ -112,6 +110,8 @@ public class XaLogicalLog implements LogLoader
     private final LogPositionCache positionCache = new LogPositionCache();
     private final FileSystemAbstraction fileSystem;
 
+    private final XaLogicalLogFiles logFiles;
+
     public XaLogicalLog( String fileName, XaResourceManager xaRm, XaCommandFactory cf,
             XaTransactionFactory xaTf, LogBufferFactory logBufferFactory, FileSystemAbstraction fileSystem, StringLogger stringLogger )
     {
@@ -121,6 +121,7 @@ public class XaLogicalLog implements LogLoader
         this.xaTf = xaTf;
         this.logBufferFactory = logBufferFactory;
         this.fileSystem = fileSystem;
+        this.logFiles = new XaLogicalLogFiles(fileName, fileSystem);
 
         log = Logger.getLogger( this.getClass().getName() + File.separator + fileName );
         sharedBuffer = ByteBuffer.allocateDirect( 9 + Xid.MAXGTRIDSIZE
@@ -135,78 +136,42 @@ public class XaLogicalLog implements LogLoader
 
     synchronized void open() throws IOException
     {
-        String activeFileName = fileName + ".active";
-        if ( !fileSystem.fileExists( activeFileName ) )
+        
+        switch(logFiles.determineState()) 
         {
-            if ( fileSystem.fileExists( fileName ) )
-            {
-                // old < b8 xaframework with no log rotation and we need to
-                // do recovery on it
-                open( fileName );
-            }
-            else
-            {
-                open( getLog1FileName() );
-                setActiveLog( LOG1 );
-            }
-        }
-        else
-        {
-            FileChannel fc = fileSystem.open( activeFileName, "rw" );
-            byte bytes[] = new byte[256];
-            ByteBuffer buf = ByteBuffer.wrap( bytes );
-            int read = fc.read( buf );
-            fc.close();
-            if ( read != 4 )
-            {
-                throw new IllegalStateException( "Read " + read +
-                    " bytes from " + activeFileName + " but expected 4" );
-            }
-            buf.flip();
-            char c = buf.asCharBuffer().get();
-            if ( c == CLEAN )
-            {
-                // clean
-                String newLog = getLog1FileName();
-                renameIfExists( newLog );
-                renameIfExists( getLog2FileName() );
-                open( newLog );
-                setActiveLog( LOG1 );
-            }
-            else if ( c == LOG1 )
-            {
-                String newLog = getLog1FileName();
-                if ( !fileSystem.fileExists( newLog ) )
-                {
-                    throw new IllegalStateException(
-                        "Active marked as 1 but no " + newLog + " exist" );
-                }
-                if ( fileSystem.fileExists( getLog2FileName() ) )
-                {
-                    fixDualLogFiles( getLog1FileName(), getLog2FileName() );
-                }
-                currentLog = LOG1;
-                open( newLog );
-            }
-            else if ( c == LOG2 )
-            {
-                String newLog = getLog2FileName();
-                if ( !fileSystem.fileExists( newLog ) )
-                {
-                    throw new IllegalStateException(
-                        "Active marked as 2 but no " + newLog + " exist" );
-                }
-                if ( fileSystem.fileExists( getLog1FileName() ) )
-                {
-                    fixDualLogFiles( getLog2FileName(), getLog1FileName() );
-                }
-                currentLog = LOG2;
-                open( newLog );
-            }
-            else
-            {
-                throw new IllegalStateException( "Unknown active log: " + c );
-            }
+        case LEGACY_WITHOUT_LOG_ROTATION:
+            open( fileName );
+            break;
+        
+        case NO_ACTIVE_FILE:
+            open( logFiles.getLog1FileName() );
+            setActiveLog( LOG1 );
+            break;
+        
+        case CLEAN:
+            String newLog = logFiles.getLog1FileName();
+            renameIfExists( newLog );
+            renameIfExists( logFiles.getLog2FileName() );
+            open( newLog );
+            setActiveLog( LOG1 );
+            break;
+        
+        case DUAL_LOGS_LOG_1_ACTIVE:
+            fixDualLogFiles( logFiles.getLog1FileName(), logFiles.getLog2FileName() );
+        case LOG_1_ACTIVE:
+            currentLog = LOG1;
+            open( logFiles.getLog1FileName() );
+            break;
+        
+        case DUAL_LOGS_LOG_2_ACTIVE:
+            fixDualLogFiles( logFiles.getLog2FileName(), logFiles.getLog1FileName() );
+        case LOG_2_ACTIVE:
+            currentLog = LOG2;
+            open( logFiles.getLog2FileName() );
+            break;
+        
+        default:
+            throw new IllegalStateException("FATAL: Unrecognized logical log state.");
         }
 
         instantiateCorrectWriteBuffer();
@@ -234,7 +199,7 @@ public class XaLogicalLog implements LogLoader
     private void open( String fileToOpen ) throws IOException
     {
         fileChannel = fileSystem.open( fileToOpen, "rw" );
-        if ( fileChannel.size() != 0 )
+        if ( new XaLogicalLogRecoveryCheck(fileChannel).recoveryRequired() )
         {
             nonCleanShutdown = true;
             doingRecovery = true;
@@ -311,7 +276,7 @@ public class XaLogicalLog implements LogLoader
                                     + e ), e );
         }
     }
-    
+
     synchronized Start getStartEntry( int identifier )
     {
         Start start = xidIdentMap.get( identifier );
@@ -1128,7 +1093,7 @@ public class XaLogicalLog implements LogLoader
 
     private String getCurrentLogFileName()
     {
-        return currentLog == LOG1 ? getLog1FileName() : getLog2FileName();
+        return currentLog == LOG1 ? logFiles.getLog1FileName() : logFiles.getLog2FileName();
     }
 
     public long getLogicalLogLength( long version )
@@ -1209,9 +1174,40 @@ public class XaLogicalLog implements LogLoader
         {
             for ( LogEntry entry : logEntries )
             {
-                if ( entry instanceof Start ) ((Start)entry).setStartPosition( writeBuffer.getFileChannelPosition() );
-                LogIoUtils.writeLogEntry( entry, writeBuffer );
-                applyEntry( entry );
+                /*
+                 * You are wondering what is going on here. Let me take you on a journey
+                 * A transaction, call it A starts, prepares locally, goes to the master and commits there
+                 *  but doesn't quite make it back here, meaning its application is pending, with only the
+                 *  start, command  and possibly prepare entries but not the commit, the Xid in xidmap
+                 * Another transaction, B, does an operation that requires going to master and pull updates - does
+                 *  that, gets all transactions not present locally (hence, A as well) and injects it.
+                 *  The Start entry is the first one extracted - if we try to apply it it will throw a Start
+                 *  entry already injected exception, since the Xid will match an ongoing transaction. If we
+                 *  had written that to the log recovery would be impossible, constantly throwing the same
+                 *  exception. So first apply, then write to log.
+                 * However we cannot do that for every entry - commit must always be written to log first, then
+                 *  applied because a crash in the mean time could cause partially applied transactions.
+                 *  The start entry does not have this problem because if it fails nothing will ever be applied -
+                 *  the same goes for commands but we don't care about those.
+                 */
+                if ( entry instanceof Start )
+                {
+                    ( (Start) entry ).setStartPosition( writeBuffer.getFileChannelPosition() );
+                    applyEntry( entry );
+                    LogIoUtils.writeLogEntry( entry, writeBuffer );
+                }
+                else
+                {
+                    LogIoUtils.writeLogEntry( entry, writeBuffer );
+                    if ( entry instanceof LogEntry.Commit )
+                    {
+                        /*
+                         * Just writeOut(), don't force or performance will be impacted severely.
+                         */
+                        writeBuffer.writeOut();
+                    }
+                    applyEntry( entry );
+                }
             }
         }
 
@@ -1351,16 +1347,6 @@ public class XaLogicalLog implements LogLoader
         checkLogRotation();
     }
 
-    private String getLog1FileName()
-    {
-        return fileName + ".1";
-    }
-
-    private String getLog2FileName()
-    {
-        return fileName + ".2";
-    }
-
     /**
      * Rotates this logical log. The pending transactions are moved over to a
      * new log buffer and the internal structures updated to reflect the new
@@ -1398,16 +1384,16 @@ public class XaLogicalLog implements LogLoader
     {
 //        if ( writeBuffer.getFileChannelPosition() == LogIoUtils.LOG_HEADER_SIZE ) return xaTf.getLastCommittedTx();
         xaTf.flushAll();
-        String newLogFile = getLog2FileName();
-        String currentLogFile = getLog1FileName();
+        String newLogFile = logFiles.getLog2FileName();
+        String currentLogFile = logFiles.getLog1FileName();
         char newActiveLog = LOG2;
         long currentVersion = xaTf.getCurrentVersion();
         String oldCopy = getFileName( currentVersion );
         if ( currentLog == CLEAN || currentLog == LOG2 )
         {
             newActiveLog = LOG1;
-            newLogFile = getLog1FileName();
-            currentLogFile = getLog2FileName();
+            newLogFile = logFiles.getLog1FileName();
+            currentLogFile = logFiles.getLog2FileName();
         }
         else
         {

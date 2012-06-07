@@ -23,24 +23,28 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.neo4j.graphdb.DynamicRelationshipType.withName;
 
 import java.io.File;
+import java.io.Serializable;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.regex.Pattern;
 
 import org.junit.Ignore;
 import org.junit.Test;
+import org.neo4j.cypher.NodeStillHasRelationshipsException;
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.DynamicRelationshipType;
-import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.kernel.EmbeddedGraphDatabase;
+import org.neo4j.graphdb.factory.GraphDatabaseFactory;
+import org.neo4j.helpers.collection.MapUtil;
+import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.impl.util.FileUtils;
-import org.neo4j.shell.impl.SameJvmClient;
 import org.neo4j.shell.kernel.GraphDatabaseShellServer;
 
 public class TestApps extends AbstractShellTest
@@ -176,15 +180,6 @@ public class TestApps extends AbstractShellTest
         assertRelationshipDoesntExist( relationships[0] );
         assertNodeExists( otherNode );
     }
-    
-    @Test
-    @Ignore
-    public void correctCypherExecution() throws Exception
-    {
-        executeCommand( "mkrel -ct KNOWS " );
-        executeCommand( "START n = node(1) return n", ".*Node\\[1\\].*" );
-        executeCommand( "START n = node(1) match n--() return n", ".*Node\\[1\\].*" );
-    }
 
     @Test
     public void rmrelCanDeleteStrandedNodes() throws Exception
@@ -264,7 +259,7 @@ public class TestApps extends AbstractShellTest
     {
         String storeDir = "target/test-data/db";
         FileUtils.deleteRecursively( new File( storeDir ) );
-        GraphDatabaseService newDb = new EmbeddedGraphDatabase( storeDir );
+        GraphDatabaseAPI newDb = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase( storeDir );
         Transaction tx = newDb.beginTx();
         newDb.getReferenceNode().delete();
         Node node = newDb.createNode();
@@ -274,11 +269,11 @@ public class TestApps extends AbstractShellTest
         tx.finish();
 
         GraphDatabaseShellServer server = new GraphDatabaseShellServer( newDb );
-        ShellClient client = new SameJvmClient( server );
-        executeCommand( server, client, "pwd", Pattern.quote( "(?)" ) );
-        executeCommand( server, client, "ls " + node.getId(), "Test" );
-        executeCommand( server, client, "cd -a " + node.getId() );
-        executeCommand( server, client, "ls", "Test" );
+        ShellClient client = ShellLobby.newClient( server );
+        executeCommand( client, "pwd", Pattern.quote( "(?)" ) );
+        executeCommand( client, "ls " + node.getId(), "Test" );
+        executeCommand( client, "cd -a " + node.getId() );
+        executeCommand( client, "ls", "Test" );
         newDb.shutdown();
     }
     
@@ -301,17 +296,17 @@ public class TestApps extends AbstractShellTest
         finishTx();
         
         executeCommand( "cd -a " + node.getId() );
-        executeCommand( "START n = node({self}) RETURN n.name", nodeOneName );
+        executeCommand( "START n = node({self}) RETURN n.name;", nodeOneName );
         executeCommand( "cd -r " + relationship.getId() );
-        executeCommand( "START r = relationship({self}) RETURN r.name", relationshipName );
+        executeCommand( "START r = relationship({self}) RETURN r.name;", relationshipName );
         executeCommand( "cd " + otherNode.getId() );
-        executeCommand( "START n = node({self}) RETURN n.name", nodeTwoName );
+        executeCommand( "START n = node({self}) RETURN n.name;", nodeTwoName );
         
         executeCommand( "cd -a " + strayNode.getId() );
         beginTx();
         strayNode.delete();
         finishTx();
-        executeCommand( "START n = node(" + node.getId() + ") RETURN n.name", nodeOneName );
+        executeCommand( "START n = node(" + node.getId() + ") RETURN n.name;", nodeOneName );
     }
     
     @Test
@@ -373,5 +368,37 @@ public class TestApps extends AbstractShellTest
                 "node = db.createNode()\n" +
                 "node.setProperty( \"name\", \"Mattias\" )\n" +
                 "node.getProperty( \"name\" )\n", "Mattias" );
+    }
+
+    @Test
+    public void cypherNodeStillHasRelationshipsException() throws Exception
+    {
+        try
+        {
+            executeCommand("create a,b,a-[:x]->b;");
+            executeCommand("start n=node(*) delete n;");
+            fail( "Should have failed with " + NodeStillHasRelationshipsException.class.getName() + " exception" );
+        }
+        catch ( ShellException e )
+        {
+            assertTrue( "Expected notice about cause not found in " + e.getMessage(),
+                    e.getMessage().contains( NodeStillHasRelationshipsException.class.getSimpleName() ) );
+        }
+    }
+    
+    @Test
+    public void canSetInitialSessionVariables() throws Exception
+    {
+        Map<String, Serializable> values = MapUtil.<String,Serializable>genericMap( "mykey", "myvalue",
+                "my_other_key", "My other value" );
+        ShellClient client = ShellLobby.newClient( shellServer, values );
+        String[] allStrings = new String[values.size()*2];
+        int i = 0;
+        for ( Map.Entry<String, Serializable> entry : values.entrySet() )
+        {
+            allStrings[i++] = entry.getKey();
+            allStrings[i++] = entry.getValue().toString();
+        }
+        executeCommand( client, "env", allStrings );
     }
 }

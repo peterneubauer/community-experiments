@@ -36,8 +36,8 @@ import org.neo4j.server.database.Database;
 import org.neo4j.server.database.DatabaseBlockedException;
 import org.neo4j.server.logging.Logger;
 
-import com.tinkerpop.blueprints.pgm.TransactionalGraph;
-import com.tinkerpop.blueprints.pgm.impls.neo4j.Neo4jGraph;
+import com.tinkerpop.blueprints.TransactionalGraph;
+import com.tinkerpop.blueprints.impls.neo4j.Neo4jGraph;
 
 public class GremlinSession implements ScriptSession
 {

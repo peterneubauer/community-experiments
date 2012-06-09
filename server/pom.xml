@@ -51,8 +51,8 @@
 
         <felix-fileinstall.version>3.0.2</felix-fileinstall.version>
         <java.io.tmpdir>${project.build.directory}</java.io.tmpdir>
-        <blueprints.version>1.2</blueprints.version>
-        <gremlin.version>1.5</gremlin.version>
+        <blueprints.version>2.1.0</blueprints.version>
+        <gremlin.version>2.1.0</gremlin.version>
 
         <!-- Run integration tests against a server that is started elsewhere. -->
         <neo-server.external>false</neo-server.external>

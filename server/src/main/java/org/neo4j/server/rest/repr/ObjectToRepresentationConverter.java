@@ -30,9 +30,9 @@ import org.neo4j.helpers.collection.FirstItemIterable;
 import org.neo4j.helpers.collection.IterableWrapper;
 import org.neo4j.helpers.collection.IteratorWrapper;
 
-import com.tinkerpop.blueprints.pgm.impls.neo4j.Neo4jEdge;
-import com.tinkerpop.blueprints.pgm.impls.neo4j.Neo4jGraph;
-import com.tinkerpop.blueprints.pgm.impls.neo4j.Neo4jVertex;
+import com.tinkerpop.blueprints.impls.neo4j.Neo4jEdge;
+import com.tinkerpop.blueprints.impls.neo4j.Neo4jGraph;
+import com.tinkerpop.blueprints.impls.neo4j.Neo4jVertex;
 import com.tinkerpop.pipes.util.structures.Table;
 
 public class ObjectToRepresentationConverter

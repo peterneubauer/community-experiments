@@ -57,12 +57,21 @@ public class GremlinSessionTest
     public void testGremlinVersion()
     {
         String result = session.evaluate( "Gremlin.version()" ).first();
-        assertEquals( "1.5" + NEWLINE, result );
+        assertEquals( "2.1.0-SNAPSHOT" + NEWLINE, result );
     }
 
     @Test
-    public void canCreateNodesAndEdgesInGremlinLand()
+    public void testIndexing() throws Exception
     {
+        setUp();
+        String result = session.evaluate( "g.createKeyIndex('name', Vertex.class)"+NEWLINE+"g.addVertex([name:'johan'])"+NEWLINE+"g.V('name', 'johan')").first();
+        assertEquals( "v[1]" + NEWLINE, result );
+    }
+
+    @Test
+    public void canCreateNodesAndEdgesInGremlinLand() throws Exception
+    {
+        setUp();
         String result = session.evaluate( "g.addVertex(null)" ).first();
         assertEquals( "v[1]" + NEWLINE, result );
         result = session.evaluate( "g.V.next(2)" ).first();

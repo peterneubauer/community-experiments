@@ -771,6 +771,78 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
+     * Create a node in an index or return the conflict node (case create).
+     */
+    @Documented
+    @Test
+    public void create_or_conflict_node() throws Exception
+    {
+        final String index = "people", key = "name", value = "Tobias";
+        helper.createNodeIndex( index );
+        ResponseEntity response = gen.get()
+                                     .expectedStatus( 201 /* created */)
+                                     .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                                     .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value
+                                                       + "\", \"properties\": {\"" + key + "\": \"" + value
+                                                       + "\", \"sequence\": 1}}" )
+                                     .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
+
+        MultivaluedMap<String, String> headers = response.response().getHeaders();
+        Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
+        assertEquals( result.get( "indexed" ), headers.getFirst( "Location" ) );
+        Map<String, Object> data = assertCast( Map.class, result.get( "data" ) );
+        assertEquals( value, data.get( key ) );
+        assertEquals( 1, data.get( "sequence" ) );
+    }
+
+    
+    /**
+     * Create a node in an index or return the conflict node (case conflict).
+     */
+    @Documented
+    @Test
+    public void create_or_conflict_node_if_existing() throws Exception
+    {
+        final String index = "people", key = "name", value = "Peter";
+
+        GraphDatabaseService graphdb = graphdb();
+        helper.createNodeIndex( index );
+        
+        Transaction tx = graphdb.beginTx();
+        try
+        {
+            Node peter = graphdb.createNode();
+            peter.setProperty( key, value );
+            peter.setProperty( "sequence", 1 );
+            graphdb.index().forNodes( index ).add( peter, key, value );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
+       
+        final RestRequest request = RestRequest.req();
+        
+        ResponseEntity response = gen.get()
+                                    .expectedStatus( 409 /* conflict */)
+                                     .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                                     .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value
+                                                       + "\", \"properties\": {\"" + key + "\": \"" + value
+                                                       + "\", \"sequence\": 2}}" )
+                                    .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
+
+
+
+        Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
+        Map<String, Object> data = assertCast( Map.class, result.get( "data" ) );
+        assertEquals( value, data.get( key ) );
+        assertEquals( 1, data.get( "sequence" ) );
+    }
+
+    
+    /**
      * Add a node to an index unless a node already exists for the given mapping.
      */
     @Documented
@@ -785,6 +857,54 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
                  .post( functionalTestHelper.nodeIndexUri() + index + "?unique" );
     }
 
+    /**
+     * Add a node to an index unless a node already exists for the given mapping then return conflict (case put).
+     */
+    @Documented
+    @Test
+    public void put_node_or_conflict_if_absent() throws Exception
+    {
+        final String index = "people", key = "name", value = "Mattias";
+        helper.createNodeIndex( index );
+        gen.get().expectedStatus( 201 /* created */ )
+                 .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                 .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.nodeUri( helper.createNode() ) + "\"}" )
+                 .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
+    }
+    
+    /**
+     * Add a node to an index unless a node already exists for the given mapping then return conflict (case conflict).
+     */
+    @Documented
+    @Test
+    public void put_node_if_absent_only_confilct() throws Exception
+    {
+        final String index = "people", key = "name", value = "Mattias";
+
+        GraphDatabaseService graphdb = graphdb();
+        Transaction tx = graphdb.beginTx();
+        try
+        {
+            Node mattias = graphdb.createNode();
+            mattias.setProperty( key, value );
+            mattias.setProperty( "sequence", 1 );
+            graphdb.index().forNodes( index ).add( mattias, key, value );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
+
+        helper.createNodeIndex( index );
+        
+        gen.get().expectedStatus( 409 /* conflict */ )
+                 .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                 .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.nodeUri( helper.createNode() ) + "\"}" )
+                 .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
+    }
+    
     private static <T> T assertCast( Class<T> type, Object object )
     {
         assertTrue( type.isInstance( object ) );

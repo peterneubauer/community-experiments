@@ -92,6 +92,12 @@ public class OutputFormat
         return response( Response.status( Status.CONFLICT ), new ExceptionRepresentation( exception ) );
     }
 
+    public final <REPR extends Representation & EntityRepresentation> Response conflict( REPR representation )
+    		throws BadInputException
+    {
+    	return response( Response.status( Status.CONFLICT ), representation );
+    }
+    
     public Response serverError( Throwable exception )
     {
         return response( Response.status( Status.INTERNAL_SERVER_ERROR ), new ExceptionRepresentation( exception ) );

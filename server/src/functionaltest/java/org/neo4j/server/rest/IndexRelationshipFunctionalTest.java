@@ -34,14 +34,21 @@ import java.util.Map;
 
 import javax.ws.rs.core.HttpHeaders;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.MultivaluedMap;
 import javax.ws.rs.core.Response.Status;
 
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.Relationship;
+import org.neo4j.graphdb.RelationshipType;
+import org.neo4j.graphdb.Transaction;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.kernel.impl.annotations.Documented;
 import org.neo4j.server.helpers.FunctionalTestHelper;
+import org.neo4j.server.rest.RESTDocsGenerator.ResponseEntity;
 import org.neo4j.server.rest.domain.GraphDbHelper;
 import org.neo4j.server.rest.domain.JsonHelper;
 import org.neo4j.server.rest.domain.JsonParseException;
@@ -54,6 +61,11 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
     private static GraphDbHelper helper;
     private static RestRequest request;
 
+    private enum MyRelationshipTypes implements RelationshipType
+	 {
+	     KNOWS
+	 }
+    
     @BeforeClass
     public static void setupServer() throws IOException
     {
@@ -406,4 +418,122 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
                      "\", \"uri\": \"" + functionalTestHelper.relationshipUri( helper.createRelationship( index ) ) + "\"}" )
            .post( functionalTestHelper.relationshipIndexUri() + index + "/?unique" );
     }
+    
+	
+   /**
+    * Create a node in an index or return the conflict relationship (case create).
+    */
+   @Documented
+   @Test
+   public void create_or_conflict_relationship() throws Exception
+   {
+   	final String index = "rels", key = "name", value = "Tobias";
+   	helper.createRelationshipIndex( index );
+   	
+   	ResponseEntity response = gen.get()
+                                    .expectedStatus( 201 /* created */)
+                                    .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                                    .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value 
+                                   		 + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                   		 + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                   		 + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}") 
+                                    .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+
+       MultivaluedMap<String, String> headers = response.response().getHeaders();
+       Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
+       assertEquals( result.get( "indexed" ), headers.getFirst( "Location" ) );
+   }
+
+   
+   /**
+    * Create a relationship in an index or return the conflict relationship (case conflict).
+    */
+   @Documented
+   @Test
+   public void create_or_conflict_relationship_if_existing() throws Exception
+   {
+   	final String index = "rels", key = "name", value = "Peter";
+
+       GraphDatabaseService graphdb = graphdb();
+       helper.createRelationshipIndex( index );
+       
+       Transaction tx = graphdb.beginTx();
+       try
+       {
+       	
+       	Node node1 = graphdb.createNode();
+       	Node node2 = graphdb.createNode();
+       	Relationship rel = node1.createRelationshipTo(node2, MyRelationshipTypes.KNOWS);
+       	
+           graphdb.index().forRelationships( index ).add( rel, key, value );
+
+           tx.success();
+       }
+       finally
+       {
+           tx.finish();
+       }
+      
+     	ResponseEntity response = gen.get()
+               .expectedStatus( 409 /* created */)
+               .payloadType( MediaType.APPLICATION_JSON_TYPE )
+               .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value 
+                                   		 + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                   		 + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                   		 + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}")
+               .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+
+   }
+   
+   /**
+    * Add a relationship to an index unless a node already exists for the given mapping then return conflict (case put).
+    */
+   @Documented
+   @Test
+   public void put_relationship_or_conflict_if_absent() throws Exception
+   {
+   	
+   	final String index = "rels", key = "name", value = "Peter";
+
+       helper.createRelationshipIndex( index );
+       
+       gen.get().expectedStatus( 201 /* created */ )
+                .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.relationshipUri( helper.createRelationship("KNOWS", helper.createNode(), helper.createNode()) ) + "\"}" )
+                .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+   }
+   
+   /**
+    * Add a relationship to an index unless a node already exists for the given mapping then return conflict (case conflict).
+    */
+   @Documented
+   @Test
+   public void put_relationship_if_absent_only_confilct() throws Exception
+   {
+   	final String index = "rels", key = "name", value = "Peter";
+       GraphDatabaseService graphdb = graphdb();
+       helper.createRelationshipIndex( index );
+       
+       Relationship rel;
+       Transaction tx = graphdb.beginTx();
+       try
+       {
+	       	Node node1 = graphdb.createNode();
+	       	Node node2 = graphdb.createNode();
+	       	rel = node1.createRelationshipTo(node2, MyRelationshipTypes.KNOWS);
+	       	
+	        graphdb.index().forRelationships( index ).add( rel, key, value );
+	        
+	        tx.success();
+       }
+       finally
+       {
+           tx.finish();
+       }
+       
+       gen.get().expectedStatus( 409 /* conflict */ )
+                .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.relationshipUri( rel.getId() ) + "\"}" )
+                .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+   }
 }

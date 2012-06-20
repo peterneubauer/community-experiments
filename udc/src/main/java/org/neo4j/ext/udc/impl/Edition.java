@@ -17,30 +17,12 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
-package org.neo4j.server.rest.web;
-
-import javax.ws.rs.core.Response;
-import javax.ws.rs.core.Response.Status;
-import javax.ws.rs.ext.ExceptionMapper;
-import javax.ws.rs.ext.Provider;
-
-import org.neo4j.server.database.DatabaseBlockedException;
+package org.neo4j.ext.udc.impl;
 
 /**
- * Map DatabaseBlockedException to a HTTP service not available response.
- * 
- * @author Jacob Hansson <jacob@voltvoodoo.com>
- * 
+ * @author mh
+ * @since 11.06.12
  */
-@Provider
-public class DatabaseBlockedExceptionMapper implements ExceptionMapper<DatabaseBlockedException>
-{
-
-    public Response toResponse( DatabaseBlockedException e )
-    {
-        return Response.status( Status.SERVICE_UNAVAILABLE )
-                .entity( "Database is temporarily unavailable, please try again in a moment." )
-                .build();
-    }
-
+public enum Edition {
+   community, advanced, enterprise;
 }

@@ -1,3 +1,9 @@
+1.8.M05 (2012-06-21)
+--------------------
+o CREATE and RELATE can now introduce path identifiers
+o Fixes #600: Double optional with no matching relationships returns too many rows
+o Fixes #613: Missing dependencies not reported correctly for queries with RELATE/SET/DELETE
+
 1.8.M04 (2012-06-07)
 --------------------
 o CREATE now accepts full paths and not only single nodes and relationships

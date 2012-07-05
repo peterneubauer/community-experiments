@@ -382,6 +382,8 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
     }
 
     /**
+     * Get or create unique relationship (create).
+     * 
      * Create a unique relationship in an index.
      */
     @Documented
@@ -403,11 +405,14 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
     }
 
     /**
+     * Get or create unique relationship (create).
+     * 
      * Add a relationship to an index unless a relationship already exists for the given mapping.
+     * Here, no previous relatoinship is found in the index, a new one is created and indexed.
      */
     @Documented
     @Test
-    public void put_relationship_if_absent() throws Exception
+    public void get_or_create_unique_relationship_create() throws Exception
     {
         final String index = "knowledge", key = "name", value = "Mattias";
         helper.createRelationshipIndex( index );
@@ -419,13 +424,60 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
            .post( functionalTestHelper.relationshipIndexUri() + index + "/?unique" );
     }
     
-	
-   /**
-    * Create a node in an index or return the conflict relationship (case create).
+    /**
+     * Get or create unique relationship (existing).
+     * 
+     * Here, in case
+     * of an already existing relationship, the sent data is ignored and the
+     * existing relatoinship returned.
+     */
+    @Documented
+    @Test
+    public void get_or_create_unique_relationship_existing() throws Exception
+    {
+     final String index = "rels", key = "name", value = "Peter";
+
+        GraphDatabaseService graphdb = graphdb();
+        helper.createRelationshipIndex( index );
+        
+        Transaction tx = graphdb.beginTx();
+        try
+        {
+         
+         Node node1 = graphdb.createNode();
+         Node node2 = graphdb.createNode();
+         Relationship rel = node1.createRelationshipTo(node2, MyRelationshipTypes.KNOWS);
+         
+            graphdb.index().forRelationships( index ).add( rel, key, value );
+
+            tx.success();
+        }
+        finally
+        {
+            tx.finish();
+        }
+       
+         ResponseEntity response = gen.get()
+                .expectedStatus( 200 /* conflict */)
+                .payloadType( MediaType.APPLICATION_JSON_TYPE )
+                .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value 
+                                          + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                          + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                          + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}")
+                .post( functionalTestHelper.relationshipIndexUri() + index + "?unique" );
+
+    }
+    
+    /**
+    * Create a unique relationship or return conflict (create).
+    * 
+    * Here, in case
+    * of an already existing relationship, an error should be returned. In this
+    * example, no existing relationship is found and a new relationship is created.
     */
    @Documented
    @Test
-   public void create_or_conflict_relationship() throws Exception
+   public void create_a_unique_relationship_or_return_conflict___create() throws Exception
    {
    	final String index = "rels", key = "name", value = "Tobias";
    	helper.createRelationshipIndex( index );
@@ -446,11 +498,15 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
 
    
    /**
-    * Create a relationship in an index or return the conflict relationship (case conflict).
+    * Create a unique relationship or return conflict (conflict).
+    * 
+    * Here, in case
+    * of an already existing relationship, an error should be returned. In this
+    * example, an existing relationship is found and an error is returned.
     */
    @Documented
    @Test
-   public void create_or_conflict_relationship_if_existing() throws Exception
+   public void create_a_unique_relationship_or_return_conflict___conflict() throws Exception
    {
    	final String index = "rels", key = "name", value = "Peter";
 
@@ -475,7 +531,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
        }
       
      	ResponseEntity response = gen.get()
-               .expectedStatus( 409 /* created */)
+               .expectedStatus( 409 /* conflict */)
                .payloadType( MediaType.APPLICATION_JSON_TYPE )
                .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value 
                                    		 + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
@@ -486,7 +542,8 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
    }
    
    /**
-    * Add a relationship to an index unless a node already exists for the given mapping then return conflict (case put).
+    * Add a relationship to an index 
+    * unless a node already exists for the given mapping then return conflict (case put).
     */
    @Documented
    @Test
@@ -504,7 +561,8 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
    }
    
    /**
-    * Add a relationship to an index unless a node already exists for the given mapping then return conflict (case conflict).
+    * Add a relationship to an index 
+    * unless a node already exists for the given mapping then return conflict (case conflict).
     */
    @Documented
    @Test

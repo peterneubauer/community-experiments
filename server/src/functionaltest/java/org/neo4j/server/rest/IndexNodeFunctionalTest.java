@@ -706,11 +706,14 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
-     * Create a unique node in an index.
+     * Get or create unique node (create).
+     * 
+     * Node are created if they don't exist in the unique index
+     * already.
      */
     @Documented
     @Test
-    public void get_or_create_node() throws Exception
+    public void get_or_create_a_node_in_an_unique_index() throws Exception
     {
         final String index = "people", key = "name", value = "Tobias";
         helper.createNodeIndex( index );
@@ -731,11 +734,16 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
-     * Create a unique node in an index (the case where it exists).
+     * Get or create unique node (existing).
+     * 
+     * Here,
+     * a node is not created but the existing unique node returned, since another node 
+     * is indexed with the same data already. The node data returned is then that of the
+     * already existing node.
      */
     @Documented
     @Test
-    public void get_or_create_node_if_existing() throws Exception
+    public void get_or_create_unique_node_if_already_existing() throws Exception
     {
         final String index = "people", key = "name", value = "Peter";
 
@@ -771,11 +779,15 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
-     * Create a node in an index or return the conflict node (case create).
+     * Create a unique node or return conflict (create).
+     * 
+     * Here, in case
+     * of an already existing node, an error should be returned. In this
+     * example, no existing indexed node is found and a new node is created.
      */
     @Documented
     @Test
-    public void create_or_conflict_node() throws Exception
+    public void create_a_unique_node_or_return_conflict_create() throws Exception
     {
         final String index = "people", key = "name", value = "Tobias";
         helper.createNodeIndex( index );
@@ -797,11 +809,16 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
 
     
     /**
-     * Create a node in an index or return the conflict node (case conflict).
+     * Create a unique node or return conflict (conflict).
+     * 
+     * Here, in case
+     * of an already existing node, an error should be returned. In this
+     * example, an existing node indexed with the same data 
+     * is found and an error is returned.
      */
     @Documented
     @Test
-    public void create_or_conflict_node_if_existing() throws Exception
+    public void create_a_unique_node_or_return_conflict___conflict() throws Exception
     {
         final String index = "people", key = "name", value = "Peter";
 
@@ -843,11 +860,14 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
 
     
     /**
-     * Add a node to an index unless a node already exists for the given mapping.
+     * Put node if absent - Create.
+     * 
+     * Add a node to an index unless a node already exists for the given index data. In
+     * this case, a new node is created since nothing existing is found in the index.
      */
     @Documented
     @Test
-    public void put_node_if_absent() throws Exception
+    public void put_node_if_absent___create() throws Exception
     {
         final String index = "people", key = "name", value = "Mattias";
         helper.createNodeIndex( index );
@@ -858,11 +878,14 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
-     * Add a node to an index unless a node already exists for the given mapping then return conflict (case put).
+     * Put node if absent - Conflict.
+     * 
+     * Add a node to an index 
+     * unless a node already exists for the given data. I that case, return conflict (case put).
      */
     @Documented
     @Test
-    public void put_node_or_conflict_if_absent() throws Exception
+    public void put_node_or_if_absent___conflict() throws Exception
     {
         final String index = "people", key = "name", value = "Mattias";
         helper.createNodeIndex( index );
@@ -873,7 +896,8 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
     
     /**
-     * Add a node to an index unless a node already exists for the given mapping then return conflict (case conflict).
+     * Add a node to an index 
+     * unless a node already exists for the given mapping then return conflict (case conflict).
      */
     @Documented
     @Test

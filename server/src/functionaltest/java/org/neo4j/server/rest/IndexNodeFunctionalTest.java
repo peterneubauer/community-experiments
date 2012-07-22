@@ -723,7 +723,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
                                      .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value
                                                        + "\", \"properties\": {\"" + key + "\": \"" + value
                                                        + "\", \"sequence\": 1}}" )
-                                     .post( functionalTestHelper.nodeIndexUri() + index + "?unique" );
+                                     .post( functionalTestHelper.nodeIndexUri() + index + "?uniqueness=get_or_create" );
 
         MultivaluedMap<String, String> headers = response.response().getHeaders();
         Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
@@ -770,7 +770,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
                                      .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value
                                                        + "\", \"properties\": {\"" + key + "\": \"" + value
                                                        + "\", \"sequence\": 2}}" )
-                                     .post( functionalTestHelper.nodeIndexUri() + index + "?unique" );
+                                     .post( functionalTestHelper.nodeIndexUri() + index + "?uniqueness=get_or_create" );
 
         Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
         Map<String, Object> data = assertCast( Map.class, result.get( "data" ) );
@@ -779,7 +779,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
-     * Create a unique node or return conflict (create).
+     * Create a unique node or fail (create).
      * 
      * Here, in case
      * of an already existing node, an error should be returned. In this
@@ -787,7 +787,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
      */
     @Documented
     @Test
-    public void create_a_unique_node_or_return_conflict_create() throws Exception
+    public void create_a_unique_node_or_fail_create() throws Exception
     {
         final String index = "people", key = "name", value = "Tobias";
         helper.createNodeIndex( index );
@@ -797,7 +797,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
                                      .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value
                                                        + "\", \"properties\": {\"" + key + "\": \"" + value
                                                        + "\", \"sequence\": 1}}" )
-                                     .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
+                                     .post( functionalTestHelper.nodeIndexUri() + index + "?uniqueness=create_or_fail" );
 
         MultivaluedMap<String, String> headers = response.response().getHeaders();
         Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
@@ -809,7 +809,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
 
     
     /**
-     * Create a unique node or return conflict (conflict).
+     * Create a unique node or return fail (fail).
      * 
      * Here, in case
      * of an already existing node, an error should be returned. In this
@@ -818,7 +818,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
      */
     @Documented
     @Test
-    public void create_a_unique_node_or_return_conflict___conflict() throws Exception
+    public void create_a_unique_node_or_return_fail___fail() throws Exception
     {
         final String index = "people", key = "name", value = "Peter";
 
@@ -848,7 +848,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
                                      .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value
                                                        + "\", \"properties\": {\"" + key + "\": \"" + value
                                                        + "\", \"sequence\": 2}}" )
-                                    .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
+                                    .post( functionalTestHelper.nodeIndexUri() + index + "?uniqueness=create_or_fail" );
 
 
 
@@ -860,7 +860,8 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
 
     
     /**
-     * Put node if absent - Create.
+     * Backward Compatibility Test (using old syntax ?unique)
+     * Put node if absent - Create. 
      * 
      * Add a node to an index unless a node already exists for the given index data. In
      * this case, a new node is created since nothing existing is found in the index.
@@ -877,61 +878,11 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
                  .post( functionalTestHelper.nodeIndexUri() + index + "?unique" );
     }
 
-    /**
-     * Put node if absent - Conflict.
-     * 
-     * Add a node to an index 
-     * unless a node already exists for the given data. I that case, return conflict (case put).
-     */
-    @Documented
-    @Test
-    public void put_node_or_if_absent___conflict() throws Exception
-    {
-        final String index = "people", key = "name", value = "Mattias";
-        helper.createNodeIndex( index );
-        gen.get().expectedStatus( 201 /* created */ )
-                 .payloadType( MediaType.APPLICATION_JSON_TYPE )
-                 .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.nodeUri( helper.createNode() ) + "\"}" )
-                 .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
-    }
-    
-    /**
-     * Add a node to an index 
-     * unless a node already exists for the given mapping then return conflict (case conflict).
-     */
-    @Documented
-    @Test
-    public void put_node_if_absent_only_confilct() throws Exception
-    {
-        final String index = "people", key = "name", value = "Mattias";
-
-        GraphDatabaseService graphdb = graphdb();
-        Transaction tx = graphdb.beginTx();
-        try
-        {
-            Node mattias = graphdb.createNode();
-            mattias.setProperty( key, value );
-            mattias.setProperty( "sequence", 1 );
-            graphdb.index().forNodes( index ).add( mattias, key, value );
-
-            tx.success();
-        }
-        finally
-        {
-            tx.finish();
-        }
-
-        helper.createNodeIndex( index );
-        
-        gen.get().expectedStatus( 409 /* conflict */ )
-                 .payloadType( MediaType.APPLICATION_JSON_TYPE )
-                 .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.nodeUri( helper.createNode() ) + "\"}" )
-                 .post( functionalTestHelper.nodeIndexUri() + index + "?unique=create" );
-    }
-    
     private static <T> T assertCast( Class<T> type, Object object )
     {
         assertTrue( type.isInstance( object ) );
         return type.cast( object );
     }
+    
+    
 }

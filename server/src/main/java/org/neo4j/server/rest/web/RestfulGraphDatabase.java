@@ -18,7 +18,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.neo4j.server.rest.web;
-
+ 
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.Collections;
@@ -118,7 +118,10 @@ public class RestfulGraphDatabase
 
     private static final String SIXTY_SECONDS = "60";
     private static final String FIFTY = "50";
-
+    
+    private static final String UNIQUENESS_MODE_GET_OR_CREATE = "get_or_create";
+	private static final String UNIQUENESS_MODE_CREATE_OR_FAIL = "create_or_fail";
+	
     // TODO Obviously change name/content on this
     private static final String HEADER_TRANSACTION = "Transaction";
 
@@ -134,7 +137,7 @@ public class RestfulGraphDatabase
     {
     	None,
     	GetOrCreate,
-    	CreateOrConflict
+    	CreateOrFail
     }
     
     public RestfulGraphDatabase( @Context UriInfo uriInfo, @Context Database database, @Context InputFormat input,
@@ -767,13 +770,14 @@ public class RestfulGraphDatabase
     @POST
     @Path( PATH_NAMED_NODE_INDEX )
     @Consumes( MediaType.APPLICATION_JSON )
-    public Response addToNodeIndex( @HeaderParam( HEADER_TRANSACTION ) ForceMode force, @PathParam( "indexName" ) String indexName, @QueryParam( "unique" ) String unique, String postBody )
+    public Response addToNodeIndex( @HeaderParam( HEADER_TRANSACTION ) ForceMode force, @PathParam( "indexName" ) String indexName, @QueryParam( "unique" ) String unique, @QueryParam( "uniqueness" ) String uniqueness, String postBody )
     {
         try
         {    	
 	       	Map<String, Object> entityBody;
 	    	Pair<IndexedEntityRepresentation, Boolean> result;
-	    	switch (unique(unique))
+	    	
+	    	switch (unique(unique, uniqueness))
 	    	{
 	        	case GetOrCreate:
 	        		entityBody = input.readMap( postBody, "key", "value" );
@@ -781,7 +785,7 @@ public class RestfulGraphDatabase
 	                       String.valueOf( entityBody.get( "value" ) ), extractNodeIdOrNull( getStringOrNull( entityBody, "uri" ) ), getMapOrNull( entityBody, "properties" ) );
 	                return result.other().booleanValue() ? output.created( result.first() ) : output.ok( result.first() );
 	
-	        	case CreateOrConflict:
+	        	case CreateOrFail:
 	        		entityBody = input.readMap( postBody, "key", "value" );
 	                result = actions( force ).getOrCreateIndexedNode( indexName, String.valueOf( entityBody.get( "key" ) ),
 	                       String.valueOf( entityBody.get( "value" ) ), extractNodeIdOrNull( getStringOrNull( entityBody, "uri" ) ), getMapOrNull( entityBody, "properties" ) );
@@ -819,13 +823,14 @@ public class RestfulGraphDatabase
 
     @POST
     @Path( PATH_NAMED_RELATIONSHIP_INDEX )
-    public Response addToRelationshipIndex( @HeaderParam( HEADER_TRANSACTION ) ForceMode force, @PathParam( "indexName" ) String indexName, @QueryParam( "unique" ) String unique, String postBody )
+    public Response addToRelationshipIndex( @HeaderParam( HEADER_TRANSACTION ) ForceMode force, @PathParam( "indexName" ) String indexName, @QueryParam( "unique" ) String unique, @QueryParam( "uniqueness" ) String uniqueness, String postBody )
     {
         try
         {
         	Map<String, Object> entityBody;
         	Pair<IndexedEntityRepresentation, Boolean> result;
-        	switch (unique(unique))
+        	
+        	switch (unique(unique, uniqueness))
         	{
 	        	case GetOrCreate:
 	                entityBody = input.readMap( postBody, "key", "value" );
@@ -835,7 +840,7 @@ public class RestfulGraphDatabase
 	                       getMapOrNull( entityBody, "properties" ) );
 	                return result.other().booleanValue() ? output.created( result.first() ) : output.ok( result.first() );
 	
-	        	case CreateOrConflict:
+	        	case CreateOrFail:
 	                entityBody = input.readMap( postBody, "key", "value" );
 	                result = actions( force ).getOrCreateIndexedRelationship( indexName, String.valueOf( entityBody.get( "key" ) ),
 	                       String.valueOf( entityBody.get( "value" ) ), extractRelationshipIdOrNull( getStringOrNull( entityBody, "uri" ) ),
@@ -868,15 +873,21 @@ public class RestfulGraphDatabase
         }
     }
 
-    private UniqueIndexType unique( String uniqueParam )
+    private UniqueIndexType unique( String uniqueParam, String uniquenessParam )
     {
     	UniqueIndexType unique = UniqueIndexType.None;
-        if ( uniqueParam == null ){
-            unique = UniqueIndexType.None;
-        } else if ("".equals( uniqueParam ) || Boolean.parseBoolean( uniqueParam )) {
+        if ( uniquenessParam == null ){
+        	// Backward compatibility check
+        	if(unique != null && ("".equals( uniqueParam ) || Boolean.parseBoolean( uniqueParam ))){
+        		unique = UniqueIndexType.GetOrCreate;
+        	}
+        	
+        } else if (UNIQUENESS_MODE_GET_OR_CREATE.equalsIgnoreCase(uniquenessParam)) {
             unique = UniqueIndexType.GetOrCreate;
-        } else if("create".equalsIgnoreCase(uniqueParam)){
-        	unique = UniqueIndexType.CreateOrConflict;
+            
+        } else if(UNIQUENESS_MODE_CREATE_OR_FAIL.equalsIgnoreCase(uniquenessParam)){
+        	unique = UniqueIndexType.CreateOrFail;
+        	
         }
         
         return unique;

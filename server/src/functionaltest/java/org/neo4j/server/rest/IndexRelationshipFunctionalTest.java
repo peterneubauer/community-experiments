@@ -401,14 +401,14 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
                      "\", \"start\": \"" + functionalTestHelper.nodeUri( start ) +
                      "\", \"end\": \"" + functionalTestHelper.nodeUri( end ) +
                      "\", \"type\": \"" + index + "\"}" )
-           .post( functionalTestHelper.relationshipIndexUri() + index + "/?unique" );
+           .post( functionalTestHelper.relationshipIndexUri() + index + "/?uniqueness=get_or_create" );
     }
 
     /**
      * Get or create unique relationship (create).
      * 
      * Add a relationship to an index unless a relationship already exists for the given mapping.
-     * Here, no previous relatoinship is found in the index, a new one is created and indexed.
+     * Here, no previous relationship is found in the index, a new one is created and indexed.
      */
     @Documented
     @Test
@@ -421,7 +421,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
            .payloadType( MediaType.APPLICATION_JSON_TYPE )
            .payload( "{\"key\": \"" + key + "\", \"value\":\"" + value +
                      "\", \"uri\": \"" + functionalTestHelper.relationshipUri( helper.createRelationship( index ) ) + "\"}" )
-           .post( functionalTestHelper.relationshipIndexUri() + index + "/?unique" );
+           .post( functionalTestHelper.relationshipIndexUri() + index + "/?uniqueness=get_or_create" );
     }
     
     /**
@@ -429,7 +429,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
      * 
      * Here, in case
      * of an already existing relationship, the sent data is ignored and the
-     * existing relatoinship returned.
+     * existing relationship returned.
      */
     @Documented
     @Test
@@ -464,12 +464,12 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
                                           + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
                                           + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
                                           + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}")
-                .post( functionalTestHelper.relationshipIndexUri() + index + "?unique" );
+                .post( functionalTestHelper.relationshipIndexUri() + index + "?uniqueness=get_or_create" );
 
     }
     
     /**
-    * Create a unique relationship or return conflict (create).
+    * Create a unique relationship or return fail (create).
     * 
     * Here, in case
     * of an already existing relationship, an error should be returned. In this
@@ -477,7 +477,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
     */
    @Documented
    @Test
-   public void create_a_unique_relationship_or_return_conflict___create() throws Exception
+   public void create_a_unique_relationship_or_return_fail___create() throws Exception
    {
    	final String index = "rels", key = "name", value = "Tobias";
    	helper.createRelationshipIndex( index );
@@ -489,7 +489,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
                                    		 + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
                                    		 + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
                                    		 + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}") 
-                                    .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+                                    .post( functionalTestHelper.relationshipIndexUri() + index + "?uniqueness=create_or_fail" );
 
        MultivaluedMap<String, String> headers = response.response().getHeaders();
        Map<String, Object> result = JsonHelper.jsonToMap( response.entity() );
@@ -498,7 +498,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
 
    
    /**
-    * Create a unique relationship or return conflict (conflict).
+    * Create a unique relationship or return fail (fail).
     * 
     * Here, in case
     * of an already existing relationship, an error should be returned. In this
@@ -506,7 +506,7 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
     */
    @Documented
    @Test
-   public void create_a_unique_relationship_or_return_conflict___conflict() throws Exception
+   public void create_a_unique_relationship_or_return_fail___fail() throws Exception
    {
    	final String index = "rels", key = "name", value = "Peter";
 
@@ -537,17 +537,17 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
                                    		 + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
                                    		 + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
                                    		 + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}")
-               .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+               .post( functionalTestHelper.relationshipIndexUri() + index + "?uniqueness=create_or_fail" );
 
    }
    
    /**
     * Add a relationship to an index 
-    * unless a node already exists for the given mapping then return conflict (case put).
+    * unless a node already exists for the given mapping then return fail (case create).
     */
    @Documented
    @Test
-   public void put_relationship_or_conflict_if_absent() throws Exception
+   public void put_relationship_or_fail_if_absent() throws Exception
    {
    	
    	final String index = "rels", key = "name", value = "Peter";
@@ -557,16 +557,16 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
        gen.get().expectedStatus( 201 /* created */ )
                 .payloadType( MediaType.APPLICATION_JSON_TYPE )
                 .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.relationshipUri( helper.createRelationship("KNOWS", helper.createNode(), helper.createNode()) ) + "\"}" )
-                .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+                .post( functionalTestHelper.relationshipIndexUri() + index + "?uniqueness=create_or_fail" );
    }
    
    /**
     * Add a relationship to an index 
-    * unless a node already exists for the given mapping then return conflict (case conflict).
+    * unless a node already exists for the given mapping then return fail (case fail).
     */
    @Documented
    @Test
-   public void put_relationship_if_absent_only_confilct() throws Exception
+   public void put_relationship_if_absent_only_fail() throws Exception
    {
    	final String index = "rels", key = "name", value = "Peter";
        GraphDatabaseService graphdb = graphdb();
@@ -592,6 +592,52 @@ public class IndexRelationshipFunctionalTest extends AbstractRestFunctionalTestB
        gen.get().expectedStatus( 409 /* conflict */ )
                 .payloadType( MediaType.APPLICATION_JSON_TYPE )
                 .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value + "\", \"uri\":\"" + functionalTestHelper.relationshipUri( rel.getId() ) + "\"}" )
-                .post( functionalTestHelper.relationshipIndexUri() + index + "?unique=create" );
+                .post( functionalTestHelper.relationshipIndexUri() + index + "?uniqueness=create_or_fail" );
+   }
+   
+   /**
+    * Backward Compatibility Test (using old syntax ?unique)
+	*
+    * Get or create unique relationship (existing).
+    * 
+    * Here, in case
+    * of an already existing relationship, the sent data is ignored and the
+    * existing relationship returned.
+    */
+   @Documented
+   @Test
+   public void get_or_create_unique_relationship_existing_create() throws Exception
+   {
+    final String index = "rels", key = "name", value = "Peter";
+
+       GraphDatabaseService graphdb = graphdb();
+       helper.createRelationshipIndex( index );
+       
+       Transaction tx = graphdb.beginTx();
+       try
+       {
+        
+        Node node1 = graphdb.createNode();
+        Node node2 = graphdb.createNode();
+        Relationship rel = node1.createRelationshipTo(node2, MyRelationshipTypes.KNOWS);
+        
+           graphdb.index().forRelationships( index ).add( rel, key, value );
+
+           tx.success();
+       }
+       finally
+       {
+           tx.finish();
+       }
+      
+        ResponseEntity response = gen.get()
+               .expectedStatus( 200 /* conflict */)
+               .payloadType( MediaType.APPLICATION_JSON_TYPE )
+               .payload( "{\"key\": \"" + key + "\", \"value\": \"" + value 
+                                         + "\", \"start\": \"" + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                         + "\", \"end\": \""  + functionalTestHelper.nodeUri( helper.createNode() ) 
+                                         + "\", \"type\":\"" + MyRelationshipTypes.KNOWS + "\"}")
+               .post( functionalTestHelper.relationshipIndexUri() + index + "?unique" );
+
    }
 }

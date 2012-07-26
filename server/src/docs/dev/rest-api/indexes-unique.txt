@@ -13,16 +13,16 @@ include::get-or-create-unique-node-(create).txt[]
 
 include::get-or-create-unique-node-(existing).txt[]
 
-include::create-a-unique-node-or-return-conflict-(create).txt[]
+include::create-a-unique-node-or-return-fail-(create).txt[]
 
-include::create-a-unique-node-or-return-conflict-(conflict).txt[]
+include::create-a-unique-node-or-return-fail-(fail).txt[]
 
 include::get-or-create-unique-relationship-(create).txt[]
 
 include::get-or-create-unique-relationship-(existing).txt[]
 
-include::create-a-unique-relationship-or-return-conflict-(create).txt[]
+include::create-a-unique-relationship-or-return-fail-(create).txt[]
 
-include::create-a-unique-relationship-or-return-conflict-(conflict).txt[]
+include::create-a-unique-relationship-or-return-fail-(fail).txt[]
 
 

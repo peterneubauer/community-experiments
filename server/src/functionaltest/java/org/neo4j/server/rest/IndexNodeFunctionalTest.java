@@ -779,7 +779,7 @@ public class IndexNodeFunctionalTest extends AbstractRestFunctionalTestBase
     }
 
     /**
-     * Create a unique node or fail (create).
+     * Create a unique node or return fail (create).
      * 
      * Here, in case
      * of an already existing node, an error should be returned. In this

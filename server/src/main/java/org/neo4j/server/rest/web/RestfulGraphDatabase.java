@@ -876,7 +876,7 @@ public class RestfulGraphDatabase
     private UniqueIndexType unique( String uniqueParam, String uniquenessParam )
     {
     	UniqueIndexType unique = UniqueIndexType.None;
-        if ( uniquenessParam == null ){
+        if ( uniquenessParam == null || uniquenessParam.equals("") ){
         	// Backward compatibility check
         	if(unique != null && ("".equals( uniqueParam ) || Boolean.parseBoolean( uniqueParam ))){
         		unique = UniqueIndexType.GetOrCreate;

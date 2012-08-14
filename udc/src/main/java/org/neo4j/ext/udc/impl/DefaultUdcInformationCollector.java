@@ -122,9 +122,13 @@ public class DefaultUdcInformationCollector implements UdcInformationCollector
     private final Map<String,String> jarNamesForTags = MapUtil.stringMap("spring-", "spring", "(javax.ejb|ejb-jar)", "ejb", "(weblogic|glassfish|websphere|jboss)", "appserver",
             "openshift", "openshift", "cloudfoundry", "cloudfoundry",
             "(junit|testng)", "test",
-            "jruby", "ruby", "clojure", "clojure", "jython", "python", "groovy", "groovy",
+            "jruby", "ruby", 
+            "clojure","clojure", 
+            "jython", "python", 
+            "groovy", "groovy",
             "(tomcat|jetty)", "web",
-            "spring-data-neo4j", "sdn");
+            "spring-data-neo4j", "sdn",
+            "neo4j-python-embedded", "python-embedded");
 
     private String determineTags(Map<String, String> jarNamesForTags, String classPath) {
         StringBuilder result=new StringBuilder();

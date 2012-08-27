@@ -24,3 +24,5 @@ include::return-the-full-range.txt[]
 
 include::return-partly-shared-path-ranges.txt[]
 
+include::order-query-results-by-time.txt[]
+

@@ -115,4 +115,25 @@ include::path-tree-layout-shared-root-path.txt[]
           Map("event.name" -> "Event3")
           ),p.toList))
   } 
+  
+  @Test def dateOrdering() {
+    testQuery(
+      title = "Order query results by time",
+      text = """For querying a time range and ordering it, one can also use strings as concatinations of the date index relationships types
+to order by.
+""",
+      queryText = "START root=node:node_auto_index(name = 'Root') " +
+                "MATCH " +
+                "datePath=root-[year]->()-[month]->()-[day]->leaf-[:VALUE]->event "+
+                "WHERE " +
+                "type(year)+type(month)+type(day) > '20101231' AND " +
+                "type(year)+type(month)+type(day) < '20110104' "+
+                "RETURN event.name " +
+                "ORDER BY event.name ASC",
+      returns = "Returning all events between 2010-12-31 and 2011-01-04, in this case +Event2+ and +Event3+.",
+      (p) => assertEquals(List(
+          Map("event.name" -> "Event2"),
+          Map("event.name" -> "Event3")
+          ),p.toList))
+  } 
 }

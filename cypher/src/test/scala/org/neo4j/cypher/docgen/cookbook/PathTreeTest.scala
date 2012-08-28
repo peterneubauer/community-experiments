@@ -128,12 +128,12 @@ to order by.
                 "WHERE " +
                 "type(year)+type(month)+type(day) > '20101231' AND " +
                 "type(year)+type(month)+type(day) < '20110104' "+
-                "RETURN event.name " +
-                "ORDER BY event.name ASC",
+                "RETURN event.name, type(year)+type(month)+type(day) as date " +
+                "ORDER BY date DESC, event.name ASC",
       returns = "Returning all events between 2010-12-31 and 2011-01-04, in this case +Event2+ and +Event3+.",
       (p) => assertEquals(List(
-          Map("event.name" -> "Event2"),
-          Map("event.name" -> "Event3")
+          Map("event.name" -> "Event3", "date" -> "20110103"),
+          Map("event.name" -> "Event2", "date" -> "20110101")
           ),p.toList))
   } 
 }

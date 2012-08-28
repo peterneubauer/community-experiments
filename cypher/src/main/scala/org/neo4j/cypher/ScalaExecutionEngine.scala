@@ -29,7 +29,7 @@ import scala.deprecated
 import org.neo4j.kernel.InternalAbstractGraphDatabase
 import org.neo4j.graphdb.GraphDatabaseService
 
-class ExecutionEngine(graph: GraphDatabaseService) {
+class ScalaExecutionEngine(graph: GraphDatabaseService) {
   checkScalaVersion()
 
   require(graph != null, "Can't work with a null graph database")
@@ -49,28 +49,28 @@ class ExecutionEngine(graph: GraphDatabaseService) {
 
 
   @throws(classOf[SyntaxException])
-  def execute(query: String): ExecutionResult = execute(query, Map[String, Any]())
+  def execute(query: String): ScalaExecutionResult = execute(query, Map[String, Any]())
 
   @throws(classOf[SyntaxException])
-  def execute(query: String, params: Map[String, Any]): ExecutionResult = prepare(query).execute(params)
+  def execute(query: String, params: Map[String, Any]): ScalaExecutionResult = prepare(query).execute(params)
 
   @throws(classOf[SyntaxException])
-  def execute(query: String, params: JavaMap[String, Any]): ExecutionResult = execute(query, params.asScala.toMap)
+  def execute(query: String, params: JavaMap[String, Any]): ScalaExecutionResult = execute(query, params.asScala.toMap)
 
   @throws(classOf[SyntaxException])
   def prepare(query: String): ExecutionPlan = executionPlanCache.getOrElseUpdate(query, new ExecutionPlanImpl(parser.parse(query), graph))
 
   @throws(classOf[SyntaxException])
   @deprecated(message = "You should not parse queries manually any more. Use the execute(String) instead")
-  def execute(query: Query): ExecutionResult = execute(query, Map[String, Any]())
+  def execute(query: Query): ScalaExecutionResult = execute(query, Map[String, Any]())
 
   @throws(classOf[SyntaxException])
   @deprecated(message = "You should not parse queries manually any more. Use the execute(String) instead")
-  def execute(query: Query, map: JavaMap[String, Any]): ExecutionResult = execute(query, map.asScala.toMap)
+  def execute(query: Query, map: JavaMap[String, Any]): ScalaExecutionResult = execute(query, map.asScala.toMap)
 
   @throws(classOf[SyntaxException])
   @deprecated(message = "You should not parse queries manually any more. Use the execute(String) instead")
-  def execute(query: Query, params: Map[String, Any]): ExecutionResult = new ExecutionPlanImpl(query, graph).execute(params)
+  def execute(query: Query, params: Map[String, Any]): ScalaExecutionResult = new ExecutionPlanImpl(query, graph).execute(params)
 
   private def checkScalaVersion() {
     if (util.Properties.versionString.matches("^version 2.9.0")) {

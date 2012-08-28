@@ -30,7 +30,7 @@ import collection.Map
 import collection.immutable.{Map => ImmutableMap}
 
 class PipeExecutionResult(r: => Traversable[Map[String, Any]], val symbols: SymbolTable, val columns: List[String])
-  extends ExecutionResult
+  extends ScalaExecutionResult
   with StringExtras
   with IterableSupport {
 

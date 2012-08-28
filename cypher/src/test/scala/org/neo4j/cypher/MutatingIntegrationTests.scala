@@ -512,7 +512,7 @@ return distinct center""")
   }
 }
 trait StatisticsChecker extends Assertions {
-  def assertStats(result: ExecutionResult,
+  def assertStats(result: ScalaExecutionResult,
                   nodesCreated: Long = 0,
                   relationshipsCreated: Long = 0,
                   propertiesSet: Long = 0,

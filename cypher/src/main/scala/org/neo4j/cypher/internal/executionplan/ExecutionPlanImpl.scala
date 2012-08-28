@@ -31,9 +31,9 @@ import internal.symbols.SymbolTable
 class ExecutionPlanImpl(inputQuery: Query, graph: GraphDatabaseService) extends ExecutionPlan {
   val (executionPlan, executionPlanText) = prepareExecutionPlan()
 
-  def execute(params: Map[String, Any]): ExecutionResult = executionPlan(params)
+  def execute(params: Map[String, Any]): ScalaExecutionResult = executionPlan(params)
 
-  private def prepareExecutionPlan(): ((Map[String, Any]) => ExecutionResult, String) = {
+  private def prepareExecutionPlan(): ((Map[String, Any]) => ScalaExecutionResult, String) = {
 
     var continue = true
     var planInProgress = ExecutionPlanInProgress(PartiallySolvedQuery(inputQuery), new ParameterPipe(), false)
@@ -89,7 +89,7 @@ class ExecutionPlanImpl(inputQuery: Query, graph: GraphDatabaseService) extends 
     columns
   }
 
-  private def getLazyReadonlyQuery(pipe: Pipe, columns: List[String]): Map[String, Any] => ExecutionResult = {
+  private def getLazyReadonlyQuery(pipe: Pipe, columns: List[String]): Map[String, Any] => ScalaExecutionResult = {
     val func = (params: Map[String, Any]) => {
       val state = new QueryState(graph, MutableMaps.create ++ params)
       new PipeExecutionResult(pipe.createResults(state), pipe.symbols, columns)
@@ -98,7 +98,7 @@ class ExecutionPlanImpl(inputQuery: Query, graph: GraphDatabaseService) extends 
     func
   }
 
-  private def getEagerReadWriteQuery(pipe: Pipe, columns: List[String]): Map[String, Any] => ExecutionResult = {
+  private def getEagerReadWriteQuery(pipe: Pipe, columns: List[String]): Map[String, Any] => ScalaExecutionResult = {
     val func = (params: Map[String, Any]) => {
       val state = new QueryState(graph, MutableMaps.create ++ params)
       new EagerPipeExecutionResult(pipe.createResults(state), pipe.symbols, columns, state, graph)

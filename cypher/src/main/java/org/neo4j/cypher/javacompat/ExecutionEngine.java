@@ -19,6 +19,7 @@
  */
 package org.neo4j.cypher.javacompat;
 
+import org.neo4j.cypher.ScalaExecutionEngine;
 import org.neo4j.cypher.SyntaxException;
 import org.neo4j.cypher.internal.commands.Query;
 import org.neo4j.graphdb.GraphDatabaseService;
@@ -30,7 +31,7 @@ import java.util.Map;
  */
 public class ExecutionEngine
 {
-    private org.neo4j.cypher.ExecutionEngine inner;
+    private ScalaExecutionEngine inner;
 
     /**
      * Creates an execution engine around the give graph database
@@ -38,7 +39,7 @@ public class ExecutionEngine
      */
     public ExecutionEngine( GraphDatabaseService database )
     {
-        inner = new org.neo4j.cypher.ExecutionEngine( database );
+        inner = new ScalaExecutionEngine( database );
     }
 
     /**

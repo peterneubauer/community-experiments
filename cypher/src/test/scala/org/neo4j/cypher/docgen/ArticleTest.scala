@@ -38,7 +38,7 @@ abstract class ArticleTest extends Assertions with DocumentationHelper {
 
   var db: GraphDatabaseService = null
   val parser: CypherParser = new CypherParser
-  implicit var engine: ExecutionEngine = null
+  implicit var engine: ScalaExecutionEngine = null
   var nodes: Map[String, Long] = null
   var nodeIndex: Index[Node] = null
   var relIndex: Index[Relationship] = null
@@ -47,11 +47,11 @@ abstract class ArticleTest extends Assertions with DocumentationHelper {
 
   def title: String
   def section: String
-  def assert(name: String, result: ExecutionResult)
+  def assert(name: String, result: ScalaExecutionResult)
   def graphDescription: List[String]
   def indexProps: List[String] = List()
 
-  def executeQuery(queryText: String)(implicit engine: ExecutionEngine): ExecutionResult = try {
+  def executeQuery(queryText: String)(implicit engine: ScalaExecutionEngine): ScalaExecutionResult = try {
     val result = engine.execute(replaceNodeIds(queryText))
     result.toList //Let's materialize the result
     result.dumpToString()
@@ -66,7 +66,7 @@ abstract class ArticleTest extends Assertions with DocumentationHelper {
     query
   }
 
-  def testWithoutDocs(queryText: String, assertions: (ExecutionResult => Unit)*): (ExecutionResult, String) = {
+  def testWithoutDocs(queryText: String, assertions: (ScalaExecutionResult => Unit)*): (ScalaExecutionResult, String) = {
     var query = queryText
     nodes.keySet.foreach((key) => query = query.replace("%" + key + "%", node(key).getId.toString))
     val result = engine.execute(query)
@@ -116,7 +116,7 @@ abstract class ArticleTest extends Assertions with DocumentationHelper {
   def runQuery(emptyGraph: Boolean, query: String, possibleAssertion: Seq[String]): String = {
     val result = if (emptyGraph) {
       val db = new ImpermanentGraphDatabase()
-      val engine = new ExecutionEngine(db)
+      val engine = new ScalaExecutionEngine(db)
       val result = executeQuery(query)(engine)
       db.shutdown()
       result
@@ -227,7 +227,7 @@ abstract class ArticleTest extends Assertions with DocumentationHelper {
         n._2.foreach((kv) => nod.setProperty(kv._1, kv._2))
       })
     })
-    engine = new ExecutionEngine(db)
+    engine = new ScalaExecutionEngine(db)
     db
   }
 }

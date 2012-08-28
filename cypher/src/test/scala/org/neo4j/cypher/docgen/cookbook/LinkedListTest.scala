@@ -20,7 +20,7 @@
 package org.neo4j.cypher.docgen.cookbook
 
 import org.neo4j.cypher.docgen.ArticleTest
-import org.neo4j.cypher.{ExecutionResult, StatisticsChecker}
+import org.neo4j.cypher.{ScalaExecutionResult, StatisticsChecker}
 import org.neo4j.visualization.graphviz.GraphStyle
 import org.neo4j.visualization.graphviz.AsciiDocSimpleStyle
 
@@ -32,7 +32,7 @@ class LinkedListTest extends ArticleTest with StatisticsChecker {
   override protected def getGraphvizStyle: GraphStyle = 
     AsciiDocSimpleStyle.withAutomaticRelationshipTypeColors()
 
-  override def assert(name: String, result: ExecutionResult) {
+  override def assert(name: String, result: ScalaExecutionResult) {
     name match {
       case "create" =>
         assertStats(result, nodesCreated = 1, relationshipsCreated = 1, propertiesSet = 0)

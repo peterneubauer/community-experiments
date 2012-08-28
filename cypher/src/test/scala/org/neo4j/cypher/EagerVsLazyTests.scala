@@ -46,8 +46,8 @@ class EagerVsLazyTests extends Assertions {
     assertTrue("This should be eager", created)
   }
 
-  private def execute(query: String): ExecutionResult = {
-    val engine = new ExecutionEngine(graph)
+  private def execute(query: String): ScalaExecutionResult = {
+    val engine = new ScalaExecutionEngine(graph)
     engine.execute(query)
   }
 

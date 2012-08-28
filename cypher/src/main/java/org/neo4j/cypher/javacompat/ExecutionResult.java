@@ -24,6 +24,8 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
+import org.neo4j.cypher.ScalaExecutionResult;
+
 /**
  * Holds Cypher query result sets, in tabular form. Each row of the result is a map
  * of column name to result object. Each column name correlates directly
@@ -39,7 +41,7 @@ import java.util.Map;
  */
 public class ExecutionResult implements Iterable<Map<String,Object>>
 {
-    private org.neo4j.cypher.ExecutionResult inner;
+    private ScalaExecutionResult inner;
 
     /**
      * Constructor used by the Cypher framework. End-users should not
@@ -48,7 +50,7 @@ public class ExecutionResult implements Iterable<Map<String,Object>>
      *
      * @param projection
      */
-    public ExecutionResult( org.neo4j.cypher.ExecutionResult projection )
+    public ExecutionResult( ScalaExecutionResult projection )
     {
         inner = projection;
     }

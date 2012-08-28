@@ -1224,7 +1224,7 @@ return a""")
   @Test def shouldSupportColumnRenaming() {
     val a = createNode(Map("name" -> "Andreas"))
 
-    val result: ExecutionResult = parseAndExecute( """
+    val result: ScalaExecutionResult = parseAndExecute( """
 start a  = node(1)
 return a as OneLove""")
 
@@ -1828,7 +1828,7 @@ RETURN x0.name?
 
   @Test def createEngineWithSpecifiedParserVersion() {
     val db = new ImpermanentGraphDatabase(Map[String, String]("cypher_parser_version" -> "1.6").asJava)
-    val engine = new ExecutionEngine(db)
+    val engine = new ScalaExecutionEngine(db)
 
     try {
       // This syntax is valid today, but should give an exception in 1.5

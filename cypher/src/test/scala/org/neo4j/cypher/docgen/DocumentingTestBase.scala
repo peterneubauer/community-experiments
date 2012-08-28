@@ -31,7 +31,7 @@ import org.neo4j.walk.Walker
 import org.neo4j.visualization.asciidoc.AsciidocHelper
 import org.neo4j.cypher.CuteGraphDatabaseService.gds2cuteGds
 import org.neo4j.cypher.javacompat.GraphImpl
-import org.neo4j.cypher.{CypherParser, ExecutionResult, ExecutionEngine}
+import org.neo4j.cypher.{CypherParser, ScalaExecutionResult, ScalaExecutionEngine}
 import org.neo4j.test.{ImpermanentGraphDatabase, TestGraphDatabaseFactory, GraphDescription}
 import org.neo4j.test.GeoffService
 import org.scalatest.Assertions
@@ -86,9 +86,9 @@ _Graph_
 }
 
 abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
-  def testQuery(title: String, text: String, queryText: String, returns: String, assertions: (ExecutionResult => Unit)*) {
+  def testQuery(title: String, text: String, queryText: String, returns: String, assertions: (ScalaExecutionResult => Unit)*) {
     val r = testWithoutDocs(queryText, assertions:_*)
-    val result: ExecutionResult = r._1
+    val result: ScalaExecutionResult = r._1
     var query: String = r._2
 
     val (dir: File, writer: PrintWriter) = createWriter(title, section)
@@ -99,7 +99,7 @@ abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
 
   var db: GraphDatabaseService = null
   val parser: CypherParser = new CypherParser
-  var engine: ExecutionEngine = null
+  var engine: ScalaExecutionEngine = null
   var nodes: Map[String, Long] = null
   var nodeIndex: Index[Node] = null
   var relIndex: Index[Relationship] = null
@@ -115,7 +115,7 @@ abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
 
   def indexProps: List[String] = List()
 
-  def dumpToFile(writer: PrintWriter, title: String, query: String, returns: String, text: String, result: ExecutionResult) {
+  def dumpToFile(writer: PrintWriter, title: String, query: String, returns: String, text: String, result: ScalaExecutionResult) {
     writer.println("[[" + nicefy(section + " " + title) + "]]")
     if (!noTitle) writer.println("== " + title + " ==")
     writer.println(text)
@@ -125,7 +125,7 @@ abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
     writer.close()
   }
 
-  def executeQuery(queryText: String): ExecutionResult = {
+  def executeQuery(queryText: String): ScalaExecutionResult = {
     var query = queryText
     nodes.keySet.foreach((key) => query = query.replace("%" + key + "%", node(key).getId.toString))
     engine.execute(query)
@@ -133,7 +133,7 @@ abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
 
 
 
-  def testWithoutDocs(queryText: String, assertions: (ExecutionResult => Unit)*): (ExecutionResult, String) = {
+  def testWithoutDocs(queryText: String, assertions: (ScalaExecutionResult => Unit)*): (ScalaExecutionResult, String) = {
     var query = queryText
     nodes.keySet.foreach((key) => query = query.replace("%" + key + "%", node(key).getId.toString))
     val result = engine.execute(query)
@@ -165,7 +165,7 @@ abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
       setConfig( GraphDatabaseSettings.node_keys_indexable, "name" ).
       setConfig( GraphDatabaseSettings.node_auto_indexing, GraphDatabaseSetting.TRUE ).
       newGraphDatabase()
-    engine = new ExecutionEngine(db)
+    engine = new ScalaExecutionEngine(db)
 
     db.asInstanceOf[ImpermanentGraphDatabase].cleanContent(false)
 
@@ -191,7 +191,7 @@ abstract class DocumentingTestBase extends Assertions with DocumentationHelper {
     })
   }
 
-  def runQuery(writer: PrintWriter, query: String, returns: String, result: ExecutionResult) {
+  def runQuery(writer: PrintWriter, query: String, returns: String, result: ScalaExecutionResult) {
     writer.println("_Query_")
     writer.println()
     writer.println(AsciidocHelper.createCypherSnippet(query))

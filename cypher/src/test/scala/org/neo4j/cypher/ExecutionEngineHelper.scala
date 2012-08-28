@@ -25,11 +25,11 @@ import org.junit.Before
 
 trait ExecutionEngineHelper extends GraphDatabaseTestBase {
 
-  var engine: ExecutionEngine = null
+  var engine: ScalaExecutionEngine = null
 
   @Before
   def executionEngineHelperInit() {
-    engine = new ExecutionEngine(graph)
+    engine = new ScalaExecutionEngine(graph)
   }
 
   def execute(query: Query, params:(String,Any)*) = {
@@ -38,7 +38,7 @@ trait ExecutionEngineHelper extends GraphDatabaseTestBase {
   }
 
 
-  def parseAndExecute(q: String, params: (String, Any)*): ExecutionResult = {
+  def parseAndExecute(q: String, params: (String, Any)*): ScalaExecutionResult = {
     val plan = engine.prepare(q)
     
     plan.execute(params.toMap)

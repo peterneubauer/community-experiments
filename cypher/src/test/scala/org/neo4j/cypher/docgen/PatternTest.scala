@@ -19,13 +19,14 @@
  */
 package org.neo4j.cypher.docgen
 
-import org.neo4j.cypher.ExecutionResult
+import org.neo4j.cypher.ScalaExecutionResult
+
 
 
 class PatternTest extends ArticleTest {
   override val indexProps: List[String] = List("name")
 
-  def assert(name: String, result: ExecutionResult) {}
+  def assert(name: String, result: ScalaExecutionResult) {}
 
   val graphDescription = List("A KNOWS B", "A KNOWS C", "A KNOWS D", "B KNOWS E", "C KNOWS E", "D KNOWS F")
 

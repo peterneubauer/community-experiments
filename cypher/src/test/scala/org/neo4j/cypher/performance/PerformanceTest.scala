@@ -20,7 +20,7 @@
 package org.neo4j.cypher.performance
 
 import scala.util.Random
-import org.neo4j.cypher.ExecutionEngine
+import org.neo4j.cypher.ScalaExecutionEngine
 import org.scalatest.Assertions
 import org.junit.{Ignore, After, Before, Test}
 import org.neo4j.graphdb.{GraphDatabaseService, DynamicRelationshipType, Node}
@@ -31,12 +31,12 @@ class PerformanceTest extends Assertions {
   val r = new Random()
 
   var db: GraphDatabaseService = null
-  var engine: ExecutionEngine = null
+  var engine: ScalaExecutionEngine = null
 
   @Before
   def init() {
     db = new GraphDatabaseFactory().newEmbeddedDatabase("target/db");
-    engine = new ExecutionEngine(db)
+    engine = new ScalaExecutionEngine(db)
   }
 
   @After
@@ -66,7 +66,7 @@ class PerformanceTest extends Assertions {
       a
     })
 
-    val engine = new ExecutionEngine(db)
+    val engine = new ScalaExecutionEngine(db)
 
     val t0 = System.nanoTime : Double
     engine.execute("start a=node({root}) match a-->b-->c, b-->d return a,count(*)", Map("root"->startPoints)).toList

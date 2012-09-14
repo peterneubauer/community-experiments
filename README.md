@@ -112,7 +112,14 @@ If it isn't setup properly, other projects (submodules) that depend on it will n
 Here is a basic intro on how to set it up:
 
 ------------------
+Hej paragraph 
 
+<table>
+    <tr>
+        <td>Foo</td>
+    </tr>
+</table>
 <iframe width="420" height="315" src="http://www.youtube.com/embed/cFczTgsxktQ" frameborder="0" allowfullscreen></iframe>
 
+Hej again
 ------------------

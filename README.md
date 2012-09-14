@@ -116,10 +116,10 @@ Hej paragraph
 
 <table>
     <tr>
-        <td>Foo</td>
+        <td><iframe width="420" height="315" src="http://www.youtube.com/embed/cFczTgsxktQ" frameborder="0" allowfullscreen></iframe>
+</td>
     </tr>
 </table>
-<iframe width="420" height="315" src="http://www.youtube.com/embed/cFczTgsxktQ" frameborder="0" allowfullscreen></iframe>
 
 Hej again
 ------------------

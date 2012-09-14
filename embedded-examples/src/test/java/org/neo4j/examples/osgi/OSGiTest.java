@@ -34,6 +34,7 @@ import java.util.Arrays;
 import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.index.Index;
+import org.neo4j.kernel.impl.ComponentVersion;
 import org.ops4j.pax.exam.ExamSystem;
 import org.ops4j.pax.exam.Option;
 import org.ops4j.pax.exam.TestContainer;
@@ -48,13 +49,12 @@ import org.osgi.framework.Constants;
 public class OSGiTest
 {
 
-    public static final String NEO4J_VERSION = "1.8-SNAPSHOT";
+    public static final String NEO4J_VERSION = new ComponentVersion().getReleaseVersion();
     public static final String GERONIMO_JTA_VERSION = "1.1.1";
 
     @Test
     public void neo4jStartupTestFelix() throws Exception
     {
-
         Option[] options = testOptions();
         Player player = new Player().with( options );
         test( player, 19 );

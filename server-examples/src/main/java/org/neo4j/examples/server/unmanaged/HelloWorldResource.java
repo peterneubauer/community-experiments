@@ -18,6 +18,7 @@
  */
 package org.neo4j.examples.server.unmanaged;
 
+import javax.ws.rs.Consumes;
 import javax.ws.rs.GET;
 import javax.ws.rs.Path;
 import javax.ws.rs.PathParam;
@@ -30,24 +31,22 @@ import javax.ws.rs.core.Response.Status;
 import org.neo4j.graphdb.GraphDatabaseService;
 
 //START SNIPPET: HelloWorldResource
-@Path( "/helloworld" )
-public class HelloWorldResource
-{
-    private final GraphDatabaseService database;
+@Path("/helloworld")
+public class HelloWorldResource {
+	private final GraphDatabaseService database;
 
-    public HelloWorldResource( @Context GraphDatabaseService database )
-    {
-        this.database = database;
-    }
+	public HelloWorldResource(@Context GraphDatabaseService database) {
+		this.database = database;
+	}
 
-    @GET
-    @Produces( MediaType.TEXT_PLAIN )
-    @Path( "/{nodeId}" )
-    public Response hello( @PathParam( "nodeId" ) long nodeId )
-    {
-        // Do stuff with the database
-        return Response.status( Status.OK ).entity(
-                ( "Hello World, nodeId=" + nodeId ).getBytes() ).build();
-    }
+	@GET
+	@Consumes(MediaType.TEXT_PLAIN)
+	@Produces(MediaType.TEXT_PLAIN)
+	@Path("/{nodeId}")
+	public Response hello(@PathParam("nodeId") long nodeId) {
+		// Do stuff with the database
+		return Response.status(Status.OK)
+				.entity(("Hello World, nodeId=" + nodeId).getBytes()).build();
+	}
 }
 // END SNIPPET: HelloWorldResource

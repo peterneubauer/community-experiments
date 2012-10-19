@@ -28,6 +28,7 @@ import java.util.List;
 import java.util.Map;
 
 import org.json.JSONException;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.neo4j.graphdb.Node;
 import org.neo4j.kernel.impl.annotations.Documented;
@@ -222,6 +223,66 @@ public class BatchOperationFunctionalTest extends AbstractRestFunctionalTestBase
 //                .expectedStatus( 200 ).get( getRelationshipIndexUri( "my_rels", "since", "2010")).entity();
 //        assertEquals(1, JsonHelper.jsonToList(  rels ).size());
     }
+    
+    @Test
+    @Ignore
+    public void shouldBeAbleToUniqueIndexing() throws Exception {
+        String jsonString = new PrettyJSON()
+            .array()
+                .object()
+                    .key("method")  .value("POST")
+                    .key("to")      .value("/index/node/People?unique")
+                    .key("id")      .value(0)
+                    .key("body")
+                        .object()
+                            .key("key").value("name")
+                            .key("value").value("Alice")
+                            .key( "properties" )
+                                .object()
+                                    .key( "name" ).value( "Alice" )
+                                .endObject()
+                        .endObject()
+                .endObject()
+                .object()
+                    .key("method")  .value("POST")
+                    .key("to")      .value("/index/node/People?unique")
+                    .key("id")      .value(1)
+                    .key("body")
+                        .object()
+                            .key("key").value("name")
+                            .key("value").value("Bob")
+                            .key( "properties" )
+                                .object()
+                                    .key( "name" ).value( "Bob" )
+                                .endObject()
+                        .endObject()
+                .endObject()
+                .object()
+                    .key("method")  .value("POST")
+                    .key("to")      .value("{0}/relationships")
+                    .key("id")      .value(2)
+                    .key("body")
+                        .object()
+                            .key("type").value("KNOWS")
+                            .key("to").value("{1}")
+                            .key( "data" )
+                                .object()
+                                    .key( "since" ).value( "1999" )
+                                .endObject()
+                        .endObject()
+                .endObject()
+            .endArray().toString();
+
+        String entity = gen.get()
+        .expectedStatus( 200 )
+        .payload( jsonString )
+        .post( batchUri() )
+        .entity();
+
+        List<Map<String, Object>> results = JsonHelper.jsonToList(entity);
+
+        assertEquals(3, results.size());
+    }
 
     private String batchUri()
     {
@@ -283,6 +344,8 @@ public class BatchOperationFunctionalTest extends AbstractRestFunctionalTestBase
 
         assertTrue(((String)res.get("message")).startsWith("Invalid JSON array in POST body"));
     }
+    
+    
     
     @Test
     public void shouldRollbackAllWhenGivenIncorrectRequest() throws JsonParseException, ClientHandlerException,

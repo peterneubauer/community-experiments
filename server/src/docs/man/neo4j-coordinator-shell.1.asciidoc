@@ -6,22 +6,16 @@ NAME
 ----
 neo4j-coordinator-shell - Neo4j Coordinator Shell interactive interface
 
-
-[[neo4j-coordinator-shell-manpage]]
+[[neo4j-manpage]]
 SYNOPSIS
 --------
-*neo4j-coordinator-shell* -server <host:port> [<cmd> <args>]
 
-[[neo4j-coordinator-shell-manpage-description]]
+*neo4j-coordinator-shell* <command>
+
+[[neo4j-manpage-description]]
 DESCRIPTION
 -----------
-Neo4j Coordinator Shell provides an interactive text-based interface to a running Neo4j Coordinator server.
 
-[[neo4j-coordinator-shell-manpage-options]]
-OPTIONS
--------
-*-server* 'HOST:PORT'::
-  Connects to a Neo4j Coordinator at the specified host and port.
-
+The Coordinator functionality and corresponding scripts are no longer required for Neo4j HA operations since version 1.9.
 
 

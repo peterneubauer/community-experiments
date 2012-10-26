@@ -23,9 +23,9 @@ import org.neo4j.graphdb.{Relationship, Path, PathExpander}
 import org.neo4j.graphdb.traversal.BranchState
 import java.lang.{Iterable => JIterable}
 import collection.JavaConverters._
-import collection.Map
+import org.neo4j.cypher.internal.pipes.ExecutionContext
 
-class TraversalPathExpander(params: Map[String, Any]) extends PathExpander[Option[ExpanderStep]] {
+class TraversalPathExpander(params: ExecutionContext) extends PathExpander[Option[ExpanderStep]] {
   def expand(path: Path, state: BranchState[Option[ExpanderStep]]): JIterable[Relationship] = {
 
     val result: Iterable[Relationship] = state.getState match {
@@ -33,8 +33,8 @@ class TraversalPathExpander(params: Map[String, Any]) extends PathExpander[Optio
 
       case Some(step) =>
         val node = path.endNode()
-        val rels: Iterable[Relationship] = step.expand(node, params)
-        state.setState(step.next)
+        val (rels, next)  = step.expand(node, params)
+        state.setState(next)
         rels
     }
 

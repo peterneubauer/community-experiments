@@ -19,6 +19,9 @@
  */
 package org.neo4j.test;
 
+import static junit.framework.Assert.fail;
+import static org.hamcrest.core.Is.is;
+import static org.junit.Assert.assertThat;
 import static org.neo4j.kernel.impl.transaction.xaframework.LogIoUtils.readEntry;
 import static org.neo4j.kernel.impl.transaction.xaframework.LogIoUtils.writeLogEntry;
 
@@ -57,45 +60,38 @@ public class LogTestUtils
     public static interface LogHook<RECORD> extends Predicate<RECORD>
     {
         void file( File file );
-        
+
         void done( File file );
     }
     
-    public static final LogHook<Pair<Byte, List<byte[]>>> EVERYTHING_BUT_DONE_RECORDS = new LogHook<Pair<Byte,List<byte[]>>>()
+    public static abstract class LogHookAdapter<RECORD> implements LogHook<RECORD>
+    {
+        @Override
+        public void file( File file )
+        {
+        }
+
+        @Override
+        public void done( File file )
+        {
+        }
+    }
+
+    public static final LogHook<Pair<Byte, List<byte[]>>> EVERYTHING_BUT_DONE_RECORDS = new LogHookAdapter<Pair<Byte,List<byte[]>>>()
     {
         @Override
         public boolean accept( Pair<Byte, List<byte[]>> item )
         {
             return item.first().byteValue() != TxLog.TX_DONE;
         }
-
-        @Override
-        public void file( File file )
-        {
-        }
-
-        @Override
-        public void done( File file )
-        {
-        }
     };
     
-    public static final LogHook<Pair<Byte, List<byte[]>>> NO_FILTER = new LogHook<Pair<Byte,List<byte[]>>>()
+    public static final LogHook<Pair<Byte, List<byte[]>>> NO_FILTER = new LogHookAdapter<Pair<Byte,List<byte[]>>>()
     {
         @Override
         public boolean accept( Pair<Byte, List<byte[]>> item )
         {
             return true;
-        }
-
-        @Override
-        public void file( File file )
-        {
-        }
-
-        @Override
-        public void done( File file )
-        {
         }
     };
     
@@ -126,7 +122,7 @@ public class LogTestUtils
             }
             return true;
         }
-        
+
         @Override
         public void file( File file )
         {
@@ -139,6 +135,59 @@ public class LogTestUtils
         {
             for ( List<Xid> xid : xids.values() )
                 System.out.println( "dangling " + xid );
+        }
+    };
+    
+    public static final LogHook<Pair<Byte, List<byte[]>>> DUMP = new LogHook<Pair<Byte,List<byte[]>>>()
+    {
+        private int recordCount = 0;
+        
+        @Override
+        public boolean accept( Pair<Byte, List<byte[]>> item )
+        {
+            System.out.println( stringify( item.first() ) + ": " + stringify( item.other() ) );
+            recordCount++;
+            return true;
+        }
+        
+        private String stringify( List<byte[]> list )
+        {
+            if ( list.size() == 2 )
+                return new XidImpl( list.get( 0 ), list.get( 1 ) ).toString();
+            else if ( list.size() == 1 )
+                return stripFromBranch( new XidImpl( list.get( 0 ), new byte[0] ).toString() );
+            throw new RuntimeException( list.toString() );
+        }
+
+        private String stripFromBranch( String xidToString )
+        {
+            int index = xidToString.lastIndexOf( ", BranchId" );
+            return xidToString.substring( 0, index );
+        }
+
+        private String stringify( Byte recordType )
+        {
+            switch ( recordType.byteValue() )
+            {
+            case TxLog.TX_START: return "TX_START";
+            case TxLog.BRANCH_ADD: return "BRANCH_ADD";
+            case TxLog.MARK_COMMIT: return "MARK_COMMIT";
+            case TxLog.TX_DONE: return "TX_DONE";
+            default: return "Unknown " + recordType;
+            }
+        }
+
+        @Override
+        public void file( File file )
+        {
+            System.out.println( "=== File:" + file + " ===" );
+            recordCount = 0;
+        }
+        
+        @Override
+        public void done( File file )
+        {
+            System.out.println( "===> Read " + recordCount + " records from " + file );
         }
     };
     
@@ -188,6 +237,7 @@ public class LogTestUtils
         FileChannel out = new RandomAccessFile( tempFile, "rw" ).getChannel();
         LogBuffer outBuffer = new DirectMappedLogBuffer( out );
         ByteBuffer buffer = ByteBuffer.allocate( 1024*1024 );
+        boolean changed = false;
         try
         {
             filter.file( file );
@@ -208,6 +258,8 @@ public class LogTestUtils
                     outBuffer.put( type );
                     writeXids( xids, outBuffer );
                 }
+                else
+                    changed = true;
             }
         }
         finally
@@ -217,8 +269,53 @@ public class LogTestUtils
             safeClose( out );
             filter.done( file );
         }
-        replace( tempFile, file );
+        
+        if ( changed )
+            replace( tempFile, file );
+        else
+            tempFile.delete();
     }
+
+    public static void assertLogContains( String logPath, LogEntry ... expectedEntries ) throws IOException
+    {
+        FileChannel fileChannel = new RandomAccessFile( logPath, "r" ).getChannel();
+        ByteBuffer buffer = ByteBuffer.allocateDirect( 9 + Xid.MAXGTRIDSIZE
+                + Xid.MAXBQUALSIZE * 10 );
+
+        try {
+            // Always a header
+            LogIoUtils.readLogHeader( buffer, fileChannel, true );
+
+            // Read all log entries
+            List<LogEntry> entries = new ArrayList<LogEntry>(  );
+            CommandFactory cmdFactory = new CommandFactory();
+            LogEntry entry;
+            while ( (entry = LogIoUtils.readEntry( buffer, fileChannel, cmdFactory )) != null )
+            {
+                entries.add( entry );
+            }
+
+            // Assert entries are what we expected
+            for(int entryNo=0;entryNo < expectedEntries.length; entryNo++)
+            {
+                LogEntry expectedEntry = expectedEntries[entryNo];
+                if(entries.size() <= entryNo)
+                {
+                    fail("Log ended prematurely. Expected to find '" + expectedEntry.toString() + "' as log entry number "+entryNo+", instead there were no more log entries." );
+                }
+
+                LogEntry actualEntry = entries.get( entryNo );
+
+                assertThat( "Unexpected entry at entry number " + entryNo, actualEntry, is( expectedEntry ) );
+            }
+
+            // And assert log does not contain more entries
+            assertThat( "The log contained more entries than we expected!", entries.size(), is( expectedEntries.length ) );
+        } finally {
+            fileChannel.close();
+        }
+    }
+
     
     private static void replace( File tempFile, File file )
     {
@@ -226,13 +323,19 @@ public class LogTestUtils
         tempFile.renameTo( file );
     }
 
-    public static void filterNeostoreLogicalLog( String storeDir, LogHook<LogEntry> filter ) throws IOException
+    public static File[] filterNeostoreLogicalLog( String storeDir, LogHook<LogEntry> filter ) throws IOException
     {
-        for ( File file : oneOrTwo( new File( storeDir, NeoStoreXaDataSource.LOGICAL_LOG_DEFAULT_NAME ) ) )
-            filterNeostoreLogicalLog( file, filter );
+        File[] logFiles = oneOrTwo( new File( storeDir, NeoStoreXaDataSource.LOGICAL_LOG_DEFAULT_NAME ) );
+        for ( File file : logFiles )
+        {
+            File filteredLog = filterNeostoreLogicalLog( file, filter );
+            replace( filteredLog, file );
+        }
+
+        return logFiles;
     }
 
-    private static void filterNeostoreLogicalLog( File file, LogHook<LogEntry> filter )
+    public static File filterNeostoreLogicalLog( File file, LogHook<LogEntry> filter )
             throws IOException
     {
         filter.file( file );
@@ -243,12 +346,17 @@ public class LogTestUtils
         ByteBuffer buffer = ByteBuffer.allocate( 1024*1024 );
         transferLogicalLogHeader( in, outBuffer, buffer );
         CommandFactory cf = new CommandFactory();
+        boolean changed = false;
         try
         {
             LogEntry entry = null;
             while ( (entry = readEntry( buffer, in, cf ) ) != null )
             {
-                if ( !filter.accept( entry ) ) continue;
+                if ( !filter.accept( entry ) )
+                {
+                    changed = true;
+                    continue;
+                }
                 writeLogEntry( entry, outBuffer );
             }
         }
@@ -259,8 +367,8 @@ public class LogTestUtils
             safeClose( out );
             filter.done( file );
         }
-   
-        replace( tempFile, file );
+
+        return tempFile;
     }
 
     private static void transferLogicalLogHeader( FileChannel in, LogBuffer outBuffer,

@@ -670,12 +670,7 @@ class ExecutionEngineTest extends ExecutionEngineHelper {
     createNodes("A", "B")
     val r = relate("A" -> "KNOWS" -> "B")
 
-    val query = Query.
-      start(NodeById("a", 1)).
-      namedPaths(NamedPath("p", RelatedTo("a", "b", "rel", Seq(), Direction.OUTGOING, false, True()))).
-      returns(ReturnItem(Identifier("p"), "p"))
-
-    val result = execute(query)
+    val result = parseAndExecute("start a = node(1) match p=a-->b return p")
 
     assertEquals(List(PathImpl(node("A"), r, node("B"))), result.columnAs[Path]("p").toList)
   }
@@ -685,15 +680,7 @@ class ExecutionEngineTest extends ExecutionEngineHelper {
     val r1 = relate("A" -> "KNOWS" -> "B")
     val r2 = relate("B" -> "KNOWS" -> "C")
 
-
-    val query = Query.
-      start(NodeById("a", 1)).
-      namedPaths(NamedPath("p",
-      RelatedTo("a", "b", "rel1", Seq(), Direction.OUTGOING, false, True()),
-      RelatedTo("b", "c", "rel2", Seq(), Direction.OUTGOING, false, True()))).
-      returns(ReturnItem(Identifier("p"), "p"))
-
-    val result = execute(query)
+    val result = parseAndExecute("start a = node(1) match p = a-[rel1]->b-[rel2]->c return p")
 
     assertEquals(List(PathImpl(node("A"), r1, node("B"), r2, node("C"))), result.columnAs[Path]("p").toList)
   }
@@ -755,12 +742,7 @@ class ExecutionEngineTest extends ExecutionEngineHelper {
     relate(b, c, "rel")
     relate(c, d, "rel")
 
-    val query = Query.start(NodeById("pA", a.getId), NodeById("pB", d.getId)).
-      namedPaths(NamedPath("p", VarLengthRelatedTo("x", "pA", "pB", Some(1), Some(5), "rel", Direction.OUTGOING))).
-      where(AllInCollection(NodesFunction(Identifier("p")), "i", Equals(Property("i", "foo"), Literal("bar")))).
-      returns(ReturnItem(Identifier("pB"), "pB"))
-
-    val result = execute(query)
+    val result = parseAndExecute("start pA = node(1), pB=node(4) match p = pA-[:rel*1..5]->pB WHERE all(i in nodes(p) where i.foo = 'bar') return pB")
 
     assertEquals(List(d), result.columnAs[Node]("pB").toList)
   }
@@ -773,11 +755,7 @@ class ExecutionEngineTest extends ExecutionEngineHelper {
     val r1 = relate(a, b, "rel")
     val r2 = relate(b, c, "rel")
 
-    val query = Query.start(NodeById("pA", a.getId)).
-      namedPaths(NamedPath("p", VarLengthRelatedTo("x", "pA", "pB", Some(2), Some(2), "rel", Direction.OUTGOING))).
-      returns(ReturnItem(RelationshipFunction(Identifier("p")), "RELATIONSHIPS(p)"))
-
-    val result = execute(query)
+    val result = parseAndExecute("start a = node(1) match p = a-[:rel*2..2]->b return RELATIONSHIPS(p)")
 
     assertEquals(List(r1, r2), result.columnAs[Node]("RELATIONSHIPS(p)").toList.head)
   }
@@ -797,16 +775,16 @@ class ExecutionEngineTest extends ExecutionEngineHelper {
   }
 
   @Test def aVarLengthPathOfLengthZero() {
-    createNodes("A", "B", "C")
-    relate("A" -> "KNOWS" -> "B")
-    relate("B" -> "KNOWS" -> "C")
+    val a = createNode()
+    val b = createNode()
+    relate(a,b)
 
-    val result = parseAndExecute("start a=node(1) match a-[*0..1]->b return a,b")
+    val result = parseAndExecute("start a=node(1) match p=a-[*0..1]->b return a,b, length(p) as l")
 
     assertEquals(
       Set(
-        Map("a" -> node("A"), "b" -> node("B")),
-        Map("a" -> node("A"), "b" -> node("A"))),
+        Map("a" -> a, "b" -> a, "l"->0),
+        Map("a" -> a, "b" -> b, "l"->1)),
       result.toSet)
   }
 
@@ -2265,4 +2243,31 @@ RETURN x0.name?
     assert(result.toList === List(Map("coll" -> List(refNode))))
   }
 
+  @Test
+  def head_on_empty_coll_should_return_null() {
+    val result = parseAndExecute("START n=node(0) RETURN head([])")
+
+    assert(result.toList === List(Map("head([])" -> null)))
+  }
+
+  @Test
+  def tail_on_empty_coll_should_return_empty_coll() {
+    val result = parseAndExecute("START n=node(0) RETURN tail([])")
+
+    assert(result.toList === List(Map("tail([])" -> List())))
+  }
+
+  @Test
+  def nodes_named_r_should_not_pose_a_problem() {
+    val a = createNode()
+    val r = createNode("foo"->"bar")
+    val b = createNode()
+
+    relate(a,r)
+    relate(r,b)
+
+    val result = parseAndExecute("START a=node(1) MATCH a-->r-->b WHERE r.foo = 'bar' RETURN b")
+
+    assert(result.toList === List(Map("b" -> b)))
+  }
 }

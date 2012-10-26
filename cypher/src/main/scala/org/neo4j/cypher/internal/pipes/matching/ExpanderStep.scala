@@ -19,25 +19,55 @@
  */
 package org.neo4j.cypher.internal.pipes.matching
 
-import org.neo4j.graphdb.{Node, Relationship, Direction, RelationshipType}
-import collection.mutable
-import collection.JavaConverters._
+import org.neo4j.graphdb._
 import org.neo4j.cypher.internal.commands.{True, Predicate}
-import collection.Map
+import collection.mutable
+import org.neo4j.cypher.internal.pipes.ExecutionContext
+import org.neo4j.cypher.internal.commands.expressions.Expression
+import org.neo4j.cypher.internal.symbols.SymbolTable
+import org.neo4j.cypher.internal.pipes.matching.MiniMap
+import scala.Some
+import org.neo4j.cypher.internal.commands.True
+import org.neo4j.cypher.EntityNotFoundException
+import org.neo4j.helpers.ThisShouldNotHappenError
 
-case class ExpanderStep(id: Int,
-                        typ: Seq[RelationshipType],
-                        direction: Direction,
-                        next: Option[ExpanderStep],
-                        relPredicate: Predicate,
-                        nodePredicate: Predicate) {
+
+trait ExpanderStep {
+  def next: Option[ExpanderStep]
+
+  def typ: Seq[RelationshipType]
+
+  def direction: Direction
+
+  def id: Int
+
+  def relPredicate: Predicate
+
+  def nodePredicate: Predicate
+
+  def createCopy(next: Option[ExpanderStep], direction: Direction, nodePredicate: Predicate): ExpanderStep
+
+  def size: Option[Int]
+
+  def expand(node: Node, parameters: ExecutionContext): (Iterable[Relationship], Option[ExpanderStep])
+
+  def shouldInclude(): Boolean
+
+  /*
+  The way we reverse the steps is by first creating a Seq out of the steps. In this Seq, the first element points to
+  Some(second), the second to Some(third), und so weiter, until the last element points to None.
+
+  By doing a fold left and creating copies along the way, we reverse the directions - we push in None as what the first
+  element will end up pointing to, and pass the steps to the next step. The result is that the first element points to
+  None, the second to Some(first), und so weiter, until we pop out the last step as our reversed expander
+   */
   def reverse(): ExpanderStep = {
-    val allSteps = getAllStepsAsSeq()
+    val allSteps = this.asSeq()
 
     val reversed = allSteps.foldLeft[Option[ExpanderStep]]((None)) {
       case (last, step) =>
         val p = step.next.map(_.nodePredicate).getOrElse(True())
-        Some(step.copy(next = last, direction = step.direction.reverse(), nodePredicate = p))
+        Some(step.createCopy(next = last, direction = step.direction.reverse(), nodePredicate = p))
     }
 
     assert(reversed.nonEmpty, "The reverse of an expander should never be empty")
@@ -45,17 +75,7 @@ case class ExpanderStep(id: Int,
     reversed.get
   }
 
-  def filter(r: Relationship, n: Node, parameters: Map[String, Any]): Boolean = {
-    val m = new MiniMap(r, n, parameters)
-    relPredicate.isMatch(m) && nodePredicate.isMatch(m)
-  }
-
-  def expand(node: Node, parameters: Map[String, Any]): Iterable[Relationship] = typ match {
-    case Seq() => node.getRelationships(direction).asScala.filter(r => filter(r, r.getOtherNode(node), parameters))
-    case x     => node.getRelationships(direction, x: _*).asScala.filter(r => filter(r, r.getOtherNode(node), parameters))
-  }
-
-  private def getAllStepsAsSeq(): Seq[ExpanderStep] = {
+  private def asSeq(): Seq[ExpanderStep] = {
     var allSteps = mutable.Seq[ExpanderStep]()
     var current: Option[ExpanderStep] = Some(this)
 
@@ -67,62 +87,89 @@ case class ExpanderStep(id: Int,
 
     allSteps.toSeq
   }
-
-  private def shape = "(%s)%s-%s-%s".format(id, left, relInfo, right)
-
-  private def left =
-    if (direction == Direction.OUTGOING)
-      ""
-    else
-      "<"
-
-  private def right =
-    if (direction == Direction.INCOMING)
-      ""
-    else
-      ">"
-
-  private def relInfo = typ.toList match {
-    case List() => ""
-    case _      => "[:%s {%s,%s}]".format(typ.map(_.name()).mkString("|"), relPredicate, nodePredicate)
-  }
-
-  override def toString = next match {
-    case None    => "%s()".format(shape)
-    case Some(x) => shape + x.toString
-  }
-
-  override def equals(p1: Any) = p1 match {
-    case null                => false
-    case other: ExpanderStep =>
-      val a = id == other.id
-      val b = direction == other.direction
-      val c = next == other.next
-      val d = typ.map(_.name()) == other.typ.map(_.name())
-      val e = relPredicate == other.relPredicate
-      val f = nodePredicate == other.nodePredicate
-      a && b && c && d && e && f
-    case _                   => false
-  }
-
-  def size: Int = next match {
-    case Some(s) => 1 + s.size
-    case None    => 1
-  }
 }
 
-class MiniMap(r: Relationship, n: Node, parameters: Map[String,Any]) extends Map[String, Any] {
-  def get(key: String): Option[Any] =
-    if (key == "r")
-      Some(r)
-    else if (key == "n")
-      Some(n)
-    else
-      parameters.get(key)
+abstract class MiniMapProperty(originalName: String, prop: String) extends Expression {
+  protected def calculateType(symbols: SymbolTable) = fail()
 
-  def iterator = throw new RuntimeException
+  def filter(f: (Expression) => Boolean) = fail()
 
-  def -(key: String) = throw new RuntimeException
+  def rewrite(f: (Expression) => Expression) = fail()
 
-  def +[B1 >: Any](kv: (String, B1)) = throw new RuntimeException
+  def symbolTableDependencies = fail()
+
+  def apply(ctx: ExecutionContext) = {
+    ctx match {
+      case m: MiniMap => {
+        val pc = extract(m)
+        try {
+          pc.getProperty(prop)
+        } catch {
+          case x: NotFoundException =>
+            throw new EntityNotFoundException("The property '%s' does not exist on %s, which was found with the identifier: %s".format(prop, pc, originalName), x)
+        }
+      }
+      case _          => fail()
+    }
+  }
+
+
+  protected def fail() = throw new ThisShouldNotHappenError("Andres", "This predicate should never be used outside of the traversal matcher")
+
+  protected def extract(m: MiniMap): PropertyContainer
+}
+
+abstract class MiniMapIdentifier(originalName:String) extends Expression {
+  protected def calculateType(symbols: SymbolTable) = fail()
+
+  def filter(f: (Expression) => Boolean) = fail()
+
+  def rewrite(f: (Expression) => Expression) = fail()
+
+  def symbolTableDependencies = fail()
+
+  def apply(ctx: ExecutionContext) = ctx match {
+    case m: MiniMap => extract(m)
+    case _          => fail()
+  }
+
+  protected def extract(m: MiniMap): PropertyContainer
+
+  def fail() = throw new ThisShouldNotHappenError("Andres", "This predicate should never be used outside of the traversal matcher")
+}
+
+case class MiniMapRelProperty(originalName: String, prop: String) extends MiniMapProperty(originalName, prop) {
+  protected def extract(m: MiniMap) = m.relationship
+}
+
+case class MiniMapNodeProperty(originalName: String, prop: String) extends MiniMapProperty(originalName, prop) {
+  protected def extract(m: MiniMap) = m.node
+}
+
+case class NodeIdentifier(name:String) extends MiniMapIdentifier(name) {
+  protected def extract(m: MiniMap) = m.node
+}
+
+case class RelationshipIdentifier(name:String) extends MiniMapIdentifier(name) {
+  protected def extract(m: MiniMap) = m.relationship
+}
+
+case class MiniMap(relationship: Relationship, node: Node, parameters: ExecutionContext)
+  extends ExecutionContext(params = parameters.params) {
+
+  override def iterator = throw new RuntimeException
+
+  override def -(key: String) = throw new RuntimeException
+
+  override def +[B1 >: Any](kv: (String, B1)) = throw new RuntimeException
+
+  override def newWith(newEntries: Seq[(String, Any)]) = throw new RuntimeException
+
+  override def newWith(newEntries: scala.collection.Map[String, Any]) = throw new RuntimeException
+
+  override def newFrom(newEntries: Seq[(String, Any)]) = throw new RuntimeException
+
+  override def newFrom(newEntries: scala.collection.Map[String, Any]) = throw new RuntimeException
+
+  override def newWith(newEntry: (String, Any)) = throw new RuntimeException
 }

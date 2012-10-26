@@ -48,12 +48,12 @@ WHERE secondlatestupdate <> null
 RETURN latest_update.text as new_status""",
       returns =
 """
-Dividing the query into steps (with relavant query), this query resembles adding new item in middle of doubly linked list:
+Dividing the query into steps, this query resembles adding new item in middle of a doubly linked list:
 
-. Get the latest update(if exists) of the user through Status relationship (`MATCH user-[r?:STATUS]-secondlatestupdate`)
-. Delete the Status relationship between user and statusupdate(if exists), as this would become the second latest update now and only the latest update would be added through Status relationship, all earlier updates would be connection to their subsequent updates through Next relationship. (`DELETE r`)
-. Now, create the new Statusupdate node (with text and date as properties) and connection this with Person through STATUS relationship (`CREATE user-[:STATUS]-(lateststatusupdate{text:{0},date:{1}}`)
-. Now, create Next relationship between latest status update and the second latest status update(if exists)  (`CREATE  lateststatusupdate-[:NEXT]-secondlatestupdate WHERE secondlatestupdate <> null`)""",
+. Get the latest update (if it exists) of the user through the `STATUS` relationship (`MATCH me-[r?:STATUS]-secondlatestupdate`).
+. Delete the `STATUS` relationship between `user` and `secondlatestupdate` (if it exists), as this would become the second latest update now and only the latest update would be added through a `STATUS` relationship, all earlier updates would be connected to their subsequent updates through a `NEXT` relationship. (`DELETE r`).
+. Now, create the new `statusupdate` node (with text and date as properties) and connect this with the user through a `STATUS` relationship (`CREATE me-[:STATUS]->(latest_update{text:'Status',date:123})`).
+. Now, create a `NEXT` relationship between the latest status update and the second latest status update (if it exists) (`CREATE latest_update-[:NEXT]-secondlatestupdate WHERE secondlatestupdate <> null`).""",
       assertions = (p) => assertEquals(List(Map("new_status" -> "Status")), p.toList))
   } 
 }

@@ -33,8 +33,8 @@ class TraversalMatcherTest extends GraphDatabaseTestBase {
   val A = withName("A")
   val B = withName("B")
 
-  val pr2 = ExpanderStep(0, Seq(B), OUTGOING, None, True(), True())
-  val pr1 = ExpanderStep(1, Seq(A), OUTGOING, Some(pr2), True(), True())
+  val pr2 = SingleStep(1, Seq(B), OUTGOING, None, True(), True())
+  val pr1 = SingleStep(0, Seq(A), OUTGOING, Some(pr2), True(), True())
 
   @Test def basic() {
     //Data nodes and rels
@@ -49,7 +49,7 @@ class TraversalMatcherTest extends GraphDatabaseTestBase {
 
     val matcher = new BidirectionalTraversalMatcher(pr1, start, end)
 
-    val queryState = new QueryState(graph, MutableMaps.create)
+    val queryState = new QueryState(graph, Map.empty)
 
     val result: Seq[Path] = matcher.findMatchingPaths(queryState, ExecutionContext.empty).toSeq
 
@@ -88,7 +88,7 @@ class TraversalMatcherTest extends GraphDatabaseTestBase {
 
     val matcher = new BidirectionalTraversalMatcher(pr1, start, end)
 
-    val queryState = new QueryState(graph, MutableMaps.create)
+    val queryState = new QueryState(graph, Map.empty)
 
     val result: Seq[Path] = matcher.findMatchingPaths(queryState, ExecutionContext.empty).toSeq
 

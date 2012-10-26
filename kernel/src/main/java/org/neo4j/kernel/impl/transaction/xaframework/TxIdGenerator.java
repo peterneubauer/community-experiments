@@ -19,9 +19,9 @@
  */
 package org.neo4j.kernel.impl.transaction.xaframework;
 
-import org.neo4j.kernel.lifecycle.Lifecycle;
+import javax.transaction.xa.XAException;
 
-public interface TxIdGenerator extends Lifecycle
+public interface TxIdGenerator
 {
     public static final TxIdGenerator DEFAULT = new TxIdGenerator()
     {
@@ -44,36 +44,17 @@ public interface TxIdGenerator extends Lifecycle
         public void committed( XaDataSource dataSource, int identifier, long txId, Integer externalAuthor )
         {
         }
-
-        @Override
-        public void init() throws Throwable
-        {
-        }
-
-        @Override
-        public void start() throws Throwable
-        {
-        }
-
-        @Override
-        public void stop() throws Throwable
-        {
-        }
-
-        @Override
-        public void shutdown() throws Throwable
-        {
-        }
     };
     
     /**
      * Generates a transaction id to use for the committing transaction.
-     * @param dataSource {@link XaDataSource} to commit.
+     *
+     * @param dataSource {@link org.neo4j.kernel.impl.transaction.xaframework.XaDataSource} to commit.
      * @param identifier temporary transaction identifier.
      * @return transaction id to use to commit the next transaction for
      * this {@code dataSource}.
      */
-    long generate( XaDataSource dataSource, int identifier );
+    long generate( final XaDataSource dataSource, final int identifier ) throws XAException;
     
     /**
      * Hook which gets called when a transaction has been committed, but before

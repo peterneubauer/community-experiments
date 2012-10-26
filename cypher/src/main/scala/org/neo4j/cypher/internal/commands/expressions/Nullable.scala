@@ -22,10 +22,11 @@ package org.neo4j.cypher.internal.commands.expressions
 import org.neo4j.cypher.internal.symbols.{SymbolTable, CypherType}
 import org.neo4j.cypher.EntityNotFoundException
 import collection.Map
+import org.neo4j.cypher.internal.pipes.ExecutionContext
 
 case class Nullable(expression: Expression) extends Expression {
-  def apply(m: Map[String, Any]) = try {
-    expression.apply(m)
+  def apply(ctx: ExecutionContext) = try {
+    expression.apply(ctx)
   } catch {
     case x: EntityNotFoundException => null
   }
